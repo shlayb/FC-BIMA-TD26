@@ -112,8 +112,8 @@ void IMU::extract_euler() {
     
     //? Convert to degree
     roll = (float)bno_euler.r / EULER_TO_DEG;
-    pitch = ((float)bno_euler.p / EULER_TO_DEG);
-
+    // pitch = ((float)bno_euler.p / EULER_TO_DEG);
+    pitch = (float)bno_euler.p / EULER_TO_DEG;
     // if (pitch_mode == 1) {
     //     pitch = (float)bno_euler.p / EULER_TO_DEG;
     // } else if (pitch_mode == 2 ) {

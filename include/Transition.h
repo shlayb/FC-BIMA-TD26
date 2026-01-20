@@ -14,6 +14,7 @@
 #include "gps.h"
 #include "takeoff.h"
 #include "bno055.h"
+#include "buzzer.h"
 
 float mode_phase, mode_fw;
 float decrease = 0.0f;  // ignore
@@ -136,94 +137,114 @@ void Transition_sequence_manual() {
     nav_gps();  // get_position() inside here
     // param changer ends
     if (mode_now == 1) {
-        // imu.pitch_mode = 1;
         mode_fbwa_plane = false;
         auto_navigation_mode = false;
-        copter_ControlFSFB(ch_roll, ch_pitch, ch_yaw, ch_throttle, imu.roll, imu.pitch, imu.yaw, imu.gyro_y, imu.gyro_x, imu.gyro_z);
-        copter_calcOutput(ch_throttle);
-        motor_loop(m1_pwm,m2_pwm,m3_pwm,m4_pwm);
-        // servos_out_manual();
-        // servos_out_manual_flywing();
+        servos_out_manual();
         plane_motors_out();  // pusher.writeMicroseconds(988);
         mode_phase = 1;
         MODE = manual->mode();  // copter
         // auto_state.distance_next_wp = current_loc.get_distance(next_WP_loc);
     } else if (mode_now == 2) {
-        // imu.pitch_mode = 2;
         mode_fbwa_plane = true;
         auto_navigation_mode = false;
-        // copter_ControlFSFB(ch_roll, ch_pitch, ch_yaw, ch_throttle, imu.roll, imu.pitch, imu.yaw, imu.gyro_y, imu.gyro_x, imu.gyro_z);
-        // copter_calcOutput(ch_throttle);
         updateFBWA_FW();
-        servos_out_fbwa_flywing();
         stabilize();
-        // servos_out_fbwa();
-        // plane_motors_out();  // TODO:crosschecking (sblmnya plane_motors_out_auto(1900))
+        servos_out_fbwa();
+        plane_motors_out();  // TODO:crosschecking (sblmnya plane_motors_out_auto(1900))
         mode_phase = 2;
         MODE = fbwa->mode();  // pusher.writeMicroseconds(ch_throttle);
     }
-    // FASE 3 TEST AUTO WP
-    else if (mode_now == 3) {
-        if (!enterauto) {
-            auto_throttle_mode = true;
-            auto_navigation_mode = true;
-            auto_loiter_mode = false;
-            prev_WP_loc = current_loc = next_WP_loc;
-            flag_wp = -1;
-            target_altitude.amsl_cm = 99.0f * M_TO_CM;  // cm
-            target_airspeed = AIRSPEED_CRUISE;
-            // Serial.println("enter auto done!");
-            add_waypoint(gepees.latitude * 10000000, gepees.longitude * 10000000, 90 * M_TO_CM, 0);
-            // add_waypoint(latitude, longitude, 90);
-            enterauto = true;  // Set flag menjadi true agar fungsi tidak dipanggil lagi
+
+    // FASE 3 FUZZY
+    //  else if (mode_now == 3) {
+    //      mode_fbwa_plane = true;
+    //      updateFBWA_FW();
+    //      stabilize();
+    //      servos_out_fbwa();
+    //      plane_motors_out();  // TODO:crosschecking (sblmnya plane_motors_out_auto(1900))
+    //      mode_phase = 3;
+    //      MODE = fbwa->mode();  // pusher.writeMicroseconds(ch_throttle);
+    //  }
+
+    // FASE 3 TEST AUTO
+        else if (mode_now == 3) {
+            if (!enterauto) {
+                auto_throttle_mode = true;
+                auto_navigation_mode = true;
+                auto_loiter_mode = false;
+                prev_WP_loc = current_loc = next_WP_loc;
+                flag_wp = -1;
+                target_altitude.amsl_cm = 69.0f * M_TO_CM;  // cm
+                target_airspeed = AIRSPEED_CRUISE;
+                // Serial.println("enter auto done!");
+                add_waypoint(gepees.latitude * 10000000, gepees.longitude * 10000000, 69, 0);
+                // add_waypoint(latitude, longitude, 90);
+                enterauto = true;  // Set flag menjadi true agar fungsi tidak dipanggil lagi
+            }
+            mode_fbwa_plane = true;
+            // test_fuzzy_roll();
+            navigate();
+            update_speed_height();
+            update_alt();
+            updateAuto_FW();
+            stabilize();
+            servos_out_fbwa();
+            plane_motors_out();
+            // plane_motors_out_auto(988);
+            mode_phase = 3;
+            MODE = automatic->mode();
         }
-        mode_fbwa_plane = true;
-        test_fuzzy_roll(); 
-        navigate();
-        update_speed_height();
-        update_alt();
-        updateAuto_FW();
-        stabilize();
-        servos_out_fbwa();
-        plane_motors_out();
-        // plane_motors_out_auto(988);
-        mode_phase = 3;
-        MODE = automatic->mode();
-    }
+
+   // FASE 3 FUZZY
+    //  else if (mode_now == 3) {
+    //     mode_fbwa_plane = true;
+    //     navigate();
+    //     update_speed_height();
+    //     update_alt();
+    //     updateAuto_FW();
+    //     flywing_control(ch_roll, ch_pitch, ch_yaw, ch_throttle, imu.roll, imu.pitch, imu.yaw, imu.gyro_y, imu.gyro_x, imu.gyro_z);
+    //     flywing_calcout();
+    //     flywing_servos_out(servo_L, servo_R);
+    //     test_fuzzy_roll(); 
+    //     // plane_motors_out();  // TODO:crosschecking (sblmnya plane_motors_out_auto(1900))
+    //     mode_phase = 3;
+    //     MODE = fbwa->mode();  // pusher.writeMicroseconds(ch_throttle);
+    //  }
+
+     // FASE 3 TEST AUTO WP
+    // else if (mode_now == 3) {
+    //     if (!enterauto) {
+    //         auto_throttle_mode = true;
+    //         auto_navigation_mode = true;
+    //         auto_loiter_mode = false;
+    //         prev_WP_loc = current_loc = next_WP_loc;
+    //         flag_wp = -1;
+    //         target_altitude.amsl_cm = 99.0f * M_TO_CM;  // cm
+    //         target_airspeed = AIRSPEED_CRUISE;
+    //         // Serial.println("enter auto done!");
+    //         add_waypoint(gepees.latitude * 10000000, gepees.longitude * 10000000, 90 * M_TO_CM, 0);
+    //         // add_waypoint(latitude, longitude, 90);
+    //         enterauto = true;  // Set flag menjadi true agar fungsi tidak dipanggil lagi
+    //     }
+    //     mode_fbwa_plane = true;
+    //     // test_fuzzy_roll(); 
+    //     navigate();
+    //     update_speed_height();
+    //     update_alt();
+    //     flywingcontrol.flywing_control_auto(ch_roll, ch_pitch, ch_yaw, ch_throttle, imu.roll, imu.pitch, imu.yaw, imu.gyro_y, imu.gyro_x, imu.gyro_z);
+    //     flywing_calcout();
+    //     flywing_servos_out(servo_L, servo_R);
+    //     // updateAuto_FW();
+    //     // stabilize();
+    //     // servos_out_fbwa();
+    //     // servos_out_fbwa_flywing();
+    //     // updateFBWA_FW();
+    //     plane_motors_out();
+    //     // plane_motors_out_auto(988);
+    //     mode_phase = 3;
+    //     MODE = automatic->mode();
+    // }
 
 }
 
-// //COPTER 2025
-// void Transition_sequence_manual() {
-//     // vertical_velocity = get_climb_rate();
-//     // parameter changer for manual/auto
-//     true_aileron = ch_roll;
-//     true_elevator = ch_pitch;
-//     true_rudder = ch_yaw;
-//     ahrs.update_ahrs();
-//     nav_gps();  // get_position() inside here
-//     // param changer ends
-//     if (mode_now == 1) {
-//         mode_fbwa_plane = false;
-//         auto_navigation_mode = false;
-//         copter_ControlFSFB(ch_roll, ch_pitch, ch_yaw, ch_throttle, imu.roll, imu.pitch, imu.yaw, imu.gyro_y, imu.gyro_x, imu.gyro_z);
-//         copter_calcOutput(ch_throttle);
-//         motor_loop(m1_pwm,m2_pwm,m3_pwm,m4_pwm);
-//         servos_out_manual();
-//         plane_motors_out();  // pusher.writeMicroseconds(988);
-//         mode_phase = 1;
-//         MODE = manual->mode();  // copter
-//         // auto_state.distance_next_wp = current_loc.get_distance(next_WP_loc);
-//     } else if (mode_now == 2) {
-//         mode_fbwa_plane = true;
-//         auto_navigation_mode = false;
-//         copter_ControlFSFB(ch_roll, ch_pitch, ch_yaw, ch_throttle, imu.roll, imu.pitch, imu.yaw, imu.gyro_y, imu.gyro_x, imu.gyro_z);
-//         copter_calcOutput(ch_throttle);
-//         updateFBWA_FW();
-//         stabilize();
-//         servos_out_fbwa();
-//         plane_motors_out();  // TODO:crosschecking (sblmnya plane_motors_out_auto(1900))
-//         mode_phase = 2;
-//         MODE = fbwa->mode();  // pusher.writeMicroseconds(ch_throttle);
-//     }
-// }
+extern FlywingControl flywingcontrol;

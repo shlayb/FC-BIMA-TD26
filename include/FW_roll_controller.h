@@ -12,7 +12,7 @@
 struct roll_gains{
     float roll_max_rate    = 70.0f;
     float roll_P           = 0.50f; //0.90 //0.80 0.60 0.50 0.40 0.35
-    float roll_D           = 0.40f;//0.34f; //0.13 0.40 0.60
+    float roll_D           = 0.432f;//0.34f; //0.13 0.40 0.60
     float roll_tau         = 0.50f;
     float roll_I           = 0.3f;
     float roll_imax        = 30.0f;

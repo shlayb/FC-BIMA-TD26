@@ -2,6 +2,7 @@
 #define RADIO_H
 #include <Arduino.h>
 #include <sbus.h>
+#include "buzzer.h"
 
 bfs::SbusRx sbus_rx(&Serial8);
 // bfs: class dr library, Serial8 dari teensy
@@ -96,6 +97,7 @@ void remote_loop() {
         arming = data.ch[4] > 1500 ? 1 : 0;
         signal_lost = data.lost_frame;
 
+        
         ch_mode = data.ch[5] * 0.6267f + 877.91f;
         ch_mode_backup = data.ch[6] * 0.6267f + 877.91f;
         ch_vehicle_mode = data.ch[7] * 0.6267f + 877.91f;
@@ -154,6 +156,7 @@ void remote_loop() {
         // Serial.println("");
 
         // manual:
+
         if (ch_mode_backup <= 1000) {
             mode_now = 1;
         } else if (ch_mode_backup > 1000 && ch_mode_backup <= 1512) {
@@ -161,6 +164,14 @@ void remote_loop() {
         } else {
             mode_now = 3;
         }
+        
+        static bool prev_arming = arming;
+        if (arming != prev_arming) {
+            if (arming) {
+                buzzer.update(true);
+            }
+        }
     }
+
 }
 #endif

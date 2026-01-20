@@ -15,7 +15,7 @@ float currentroll = 0.0f;
 float prevroll = 0.0f;
 float outroll = 0.0f;
 
-void test_fuzzy_roll() {
+void  test_fuzzy_roll() {
     currentroll = abs(nav_roll_deg - imu.roll);
     // set the input
     fuzzyroll->setInput(1, currentroll);
@@ -25,8 +25,8 @@ void test_fuzzy_roll() {
     // running the defuzzification
     outroll = fuzzyroll->defuzzify(1);
     // printing something gain K default = 2.09
-    float finalroll = 0.50 + outroll;
-    float gyro_roll = 0.40f;  // get_gain_K_gyro();
+    float finalroll = 1.0 + outroll;
+    float gyro_roll = 0.0f;  // get_gain_K_gyro();
     set_gain_roll(finalroll, gyro_roll);
     // deltaroll = abs(currentroll - prevroll);
     prevroll = currentroll;

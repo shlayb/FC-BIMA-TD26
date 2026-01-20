@@ -6,6 +6,11 @@
 #include "airspeed.h"
 #include "gps.h"
 #include "Voltage.h"
+#include "flywing_control.h"
+#include "TimingUtils.h"
+// #include "mode_setup.h"
+#include "fuzzy_fw_roll.h"
+// #include "Mode_Transisi.h"
 
 // #include <Scheduler/scheduler.h>
 class Telemetry {
@@ -44,85 +49,158 @@ void modifygain(float &prev_gain, float new_gain) {
 int linee = 0;
 int milisawall = 0;
 void Telemetry::pid_gain_tuning() {
-    // if (Serial2.available()) {
-    //     char selector = Serial2.read();
+    if (Serial2.available()) {
+        char selector = Serial2.read();
 
-    //     if (true) {
-    //         switch (selector) {
-    //             case 'Q':
-    //             case 'q':
-    //                 modifygain(r_gain.roll_P, 0.01);
-    //                 break;
-    //             case 'A':
-    //             case 'a':
-    //                 modifygain(r_gain.roll_P, -0.01);
-    //                 break;
-    //             case 'W':
-    //             case 'w':
-    //                 modifygain(r_gain.roll_D, 0.01);
-    //                 break;
-    //             case 'S':
-    //             case 's':
-    //                 modifygain(r_gain.roll_D, -0.01);
-    //                 break;
-    //             case 'E':
-    //             case 'e':
-    //                 modifygain(p_gain.pitch_P, 0.01);
-    //                 break;
-    //             case 'D':
-    //             case 'd':
-    //                 modifygain(p_gain.pitch_P, -0.01);
-    //                 break;
-    //             case 'R':
-    //             case 'r':
-    //                 modifygain(p_gain.pitch_D, 0.01);
-    //                 break;
-    //             case 'F':
-    //             case 'f':
-    //                 modifygain(p_gain.pitch_D, -0.01);
-    //                 break;
-    //             default:
-    //                 break;
-    //         }
-    //     }
-    // }
-    // Serial2.print("1)PR: ");
-    // Serial2.print(r_gain.roll_P);
-    // Serial2.print(" | 2)DR: ");
-    // Serial2.print(r_gain.roll_D);
-    // Serial2.print(" | 3)PP: ");
-    // Serial2.print(p_gain.pitch_P);
-    // Serial2.print(" | 4)PD: ");
-    // Serial2.print(p_gain.pitch_D);
+        if (true) {
+            switch (selector) {
+                case 'Q':
+                case 'q':
+                    modifygain(r_gain.roll_P, 0.01);
+                    break;
+                case 'A':
+                case 'a':
+                    modifygain(r_gain.roll_P, -0.01);
+                    break;
+                case 'W':
+                case 'w':
+                    modifygain(r_gain.roll_D, 0.01);
+                    break;
+                case 'S':
+                case 's':
+                    modifygain(r_gain.roll_D, -0.01);
+                    break;
+                case 'E':
+                case 'e':
+                    modifygain(p_gain.pitch_P, 0.01);
+                    break;
+                case 'D':
+                case 'd':
+                    modifygain(p_gain.pitch_P, -0.01);
+                    break;
+                case 'R':
+                case 'r':
+                    modifygain(p_gain.pitch_D, 0.01);
+                    break;
+                case 'F':
+                case 'f':
+                    modifygain(p_gain.pitch_D, -0.01);
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+    Serial2.print("1)PR: ");
+    Serial2.print(r_gain.roll_P);
+    Serial2.print(" | 2)DR: ");
+    Serial2.print(r_gain.roll_D);
+    Serial2.print(" | 3)PP: ");
+    Serial2.print(p_gain.pitch_P);
+    Serial2.print(" | 4)PD: ");
+    Serial2.print(p_gain.pitch_D);
 
-    Serial2.print("| arm:");
+    // Serial2.print("YP: ");
+    // Serial2.print(gain.rate_yaw_P);
+    // Serial2.print(" |YD: ");
+    // Serial2.print(gain.rate_yaw_D);
+    // Serial2.print(" |YI: ");
+    // Serial2.print(gain.rate_yaw_I);
+    // Serial2.print(" |PD: ");
+    // Serial2.print(flywingcontrol.gain_flywing.k_pitch_rate);
+    Serial2.print(" |Arm: ");
     Serial2.print(arming);
-    Serial2.print(" phse:");
-    Serial2.print(mode_phase);
-    Serial2.print(" alt:");
-    Serial2.print(baro.altitude);
-    Serial2.print(" wpsum:");
-    Serial2.print(wp_sum);
-    Serial2.print(" wp:");
-    Serial2.print(flag_wp);
-    Serial2.print(" dist:");
-    Serial2.print(auto_state.distance_next_wp/*current_loc.get_distance(next_WP_loc)*/);
-    Serial2.print(" r:");
+    Serial2.print(" |R: ");
     Serial2.print(imu.roll);
-    Serial2.print(" p:");
+    Serial2.print(" |P: ");
     Serial2.print(imu.pitch);
+    Serial2.print(" |Y: ");
+    Serial2.print(imu.yaw);
+    Serial2.print(" |head:");
+    Serial2.print(imu.heading);
+    Serial2.print(" |alt = ");
+    Serial2.print(baro.altitude);
+    // Serial2.print(" |Mode: ");
+    // Serial2.print(modeCode4(current));
+    Serial2.print(" |Mode: ");
+    Serial2.print(mode_now);
+    Serial2.print(" |ch_roll: ");
+    Serial2.print(ch_roll);
+    Serial2.print(" |ch_pitch: ");
+    Serial2.print(ch_pitch);
+    Serial2.print(" |ch_yaw: ");
+    Serial2.print(ch_yaw);
+    Serial2.print(" |ch_thr: ");
+    Serial2.print(ch_throttle);
+    // Serial2.print(" |gx:");
+    // Serial2.print(imu.gyro_x);
+    // Serial2.print(" |gy:");
+    // Serial2.print(imu.gyro_y);
+    // Serial2.print(" |gz:");
+    // Serial2.print(imu.gyro_z);
+    // Serial2.print(" |hdop:");
+    // Serial2.print(gepees.hdop);
+    // Serial2.print(" |sat:");
+    // Serial2.print(gepees.satellites);
+    // Serial2.print(" |gspd:");
+    // Serial2.print(ahrs.groundspeed);
+
+    // Serial2.print(" |aspd = ");
+    // Serial2.print(arspd.v_ms);
+    // Serial2.print(" |GPD = ");
+    // Serial2.print(get_pitch_demand());
+    // Serial2.print(" |GTD = ");
+    // Serial2.print(get_throttle_demand());
+    // Serial2.print(" |GRD: ");
+    // Serial2.print(nav_roll_cd());
+    // Serial2.print(" |dis_wp = ");
+    // Serial2.print(current_loc.get_distance(next_WP_loc));
+    // Serial2.print(" |flwp = ");
+    // Serial2.print(display_wp());
+    // Serial2.print(" |PA = ");
+    // Serial2.print(nav_roll_deg);
+    // Serial2.print(" |PE = ");
+    // Serial2.print(nav_pitch_deg);
+    // Serial2.print(" |arm:");
+    // Serial2.print(arming);
+    // Serial2.print(" |phase:");
+    // Serial2.print(phase_now);
+    // Serial2.print(" |alt:");
+    // Serial2.print(baro.altitude);
+    // Serial2.print(" wpsum:");
+    // Serial2.print(wp_sum);
+    // Serial2.print(" wp:");
+    // Serial2.print(flag_wp);
+    // Serial2.print(" dist:");
+    // Serial2.print(auto_state.distance_next_wp/*current_loc.get_distance(next_WP_loc)*/);
+    // Serial2.print(" | r:");
+    // Serial2.print(imu.roll);
+    // Serial2.print(" | p:");
+    // Serial2.print(imu.pitch);
     // Serial2.print(" p_rad:");
     // Serial2.print(rad_pitch);
-    Serial2.print(" y:");
-    Serial2.print(imu.yaw);
-    Serial2.print(" hdop:");
-    Serial2.print(gepees.hdop);
-    Serial2.print(" sat:");
-    Serial2.print(gepees.satellites);
-    Serial2.print(" dR:");
-    Serial2.print(imu.delta_roll);
-    Serial2.print(" fzout:");
-    Serial2.print(outroll);
+    // Serial2.print(" | y:");
+    // Serial2.print(imu.yaw);
+    // Serial2.print(" |hdop:");
+    // Serial2.print(gepees.hdop);
+    // Serial2.print(" |sat:");
+    // Serial2.print(gepees.satellites);
+    // Serial2.print(" mode: ");
+    // Serial2.print(modeCode4(current));
+    // Serial2.print(" MHOV: ");
+    // Serial2.print(QUAD_PWM_THR);
+    // Serial2.print (" mp:");
+    // Serial2.print (motor_pwm);
+    // Serial2.print(" MPUS: ");
+    // Serial2.print(PUSHER_PWM);
+    // Serial2.print(" dR:");
+    // Serial2.print(imu.delta_roll);
+    // Serial2.print(" fzout:");
+    // Serial2.print(outroll);
+
+    // Serial2.print(" |ch_thr:");
+    // Serial2.print(ch_throttle);
+   
     // Serial2.print(" navroll:");
     // Serial2.print(nav_roll_deg);
     // Serial2.print(" navptch ");
@@ -141,8 +219,8 @@ void Telemetry::pid_gain_tuning() {
     // Serial2.print(pwm_ele);
     // Serial2.print(" PTH:");
     // Serial2.print(motor_pwm);
-    Serial2.print(" head:");
-    Serial2.print(imu.heading);
+    // Serial2.print(" |head:");
+    // Serial2.print(imu.heading);
     // Serial2.print(" get_VXdot:");
     // Serial2.print(get_VXdot());
     // Serial2.print(" lacc:");
@@ -151,14 +229,25 @@ void Telemetry::pid_gain_tuning() {
     // Serial2.print(positive_counter);
     // Serial2.print(" n:");
     // Serial2.print(negative_counter);
-    Serial2.print(" lat:");
-    Serial2.print(gepees.latitude, 6);
-    Serial2.print(" lng:");
-    Serial2.print(gepees.longitude, 6);
-    Serial2.print(" aspd:");
-    Serial2.print(arspd.v_ms);
-    Serial2.print(" gspd:");
-    Serial2.print(ahrs.groundspeed);
+    // Serial2.print(" |lat:");
+    // Serial2.print(gepees.latitude, 6);
+    // Serial2.print(" |lng:");
+    // Serial2.print(gepees.longitude, 6);
+    // Serial2.print(" aspd:");
+    // Serial2.print(arspd.v_ms);
+
+    // Serial2.print (" m1: ");
+    // Serial2.print (m1_pwm);
+    // Serial2.print (" m2: ");
+    // Serial2.print (m2_pwm);
+    // Serial2.print (" m3: ");
+    // Serial2.print (m3_pwm);
+    // Serial2.print (" m4: ");
+    // Serial2.print (m4_pwm);
+    // Serial2.print(" | gspd:");
+    // Serial2.print(ahrs.groundspeed);
+    // Serial2.print(" |millis:");
+    // Serial2.print(getMillis());
     // Serial2.print(" gspd_l1:");
     // Serial2.print(grspd);
     // Serial2.println(groundspeed);
@@ -166,8 +255,8 @@ void Telemetry::pid_gain_tuning() {
     // Serial2.print(scaleToAngle(ch_roll));
     // Serial2.print(" bearing :");
     // Serial2.print(nav_bearing_cd()); 
-    Serial2.print(" batt:");
-    Serial2.print(batt_v);
+    // Serial2.print(" batt:");
+    // Serial2.print(batt_v);
     // Serial2.print(" tim:");    
 
     // Serial2.print(" | 6)DP: ");
@@ -354,7 +443,7 @@ void Telemetry::send_vehicle_attitude_data() {
 					gepees.latitude,
 					gepees.longitude, 
 					display_batt(), //percentage
-					MODE,
+					MODE, //MODE
 					arming, 
 					mode_phase,
 					imu.delta_roll, //aileron
@@ -380,14 +469,15 @@ void Telemetry::send_vehicle_attitude_data() {
 					auto_state.next_turn_angle, 
 				  	0, ///bearing to next wp 
 					acceptance_distance_m,
-					lateral_acceleration(),  
-					baro.get_climb_rate(),  //--climbRate, //! need implementation
+					0, //lateral_acceleration(),  
+					0,  //--climbRate, //! need implementation
                     pwm_ail_R, //--ail_as_servo, 
 					pwm_ele, //--ele_as_servo, 
 					pwm_rud_R, //--rud_as_servo, 
 					ch_throttle,  //--mtr_as_servo, 
 				  	HEAD_MAX);
-    }
+    }       
+    
 // void Telemetry::print_wp(){
 //     // Serial.print("TAKEOFF(%d)\r\n",fixwing.takeoff_sum);
 //     // for(int i=0;i<fixwing.takeoff_sum;i++){
@@ -437,4 +527,5 @@ void Telemetry::send_vehicle_attitude_data() {
 //     // );
 // }
 extern Telemetry telem;
+// extern ModeId current;
 #endif

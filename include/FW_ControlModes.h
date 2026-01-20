@@ -64,7 +64,7 @@ void updateFBWA_FW()
     nav_roll_deg = outputScaler(ch_roll) * HEAD_MAX; 
     //pwm 1000: 0, 2000:1 
     if (ch_throttle <= 1100){
-        nav_roll_deg = constrain(nav_roll_deg, -75, 75);  //pas kecepatan kecil, rollnya toleransinya diperbesar lg
+        nav_roll_deg = constrain(nav_roll_deg, -55, 55);  //pas kecepatan kecil, rollnya toleransinya diperbesar lg
     }
     float pitch_input = outputScaler(ch_pitch);
     //makin pelan pesawat osilasinya makin besar jadi toleransinya harus diperbesar lg
@@ -85,7 +85,7 @@ void calc_nav_roll()
     // cmdroll = commanded_roll;
     nav_roll_deg = constrain(commanded_roll, -36, 36);
     // update_load_factor();
-} 
+}
 
 /** calculate pitch from speed and height controller in auto mode */
 void calc_nav_pitch()
@@ -95,7 +95,7 @@ void calc_nav_pitch()
         demanded_pitch = 0;
     }
     else {
-        demanded_pitch = get_pitch_demand();
+        demanded_pitch = -get_pitch_demand();
     }
     
     nav_pitch_deg = constrain(demanded_pitch, pitch_limit_min, pitch_limit_max);

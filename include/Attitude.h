@@ -26,7 +26,7 @@ float calc_nav_yaw_coordinated() {
     float commanded_yaw;
     commanded_yaw = -u_yaw;
     // commanded_yaw += scaleToAngle(ch_yaw) * RUDDER_MIX;
-    commanded_yaw += u_roll * RUDDER_MIX;
+    commanded_yaw += u_roll * (RUDDER_MIX);
     if (mode_fbwa_plane) {
         commanded_yaw += rudder_in;
     }

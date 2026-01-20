@@ -107,10 +107,10 @@
 #define HEAD_MAX 36
 #endif
 #ifndef PITCH_MAX
-#define PITCH_MAX 40 //42 35 fix 38 35
+#define PITCH_MAX 30 //42 35 fix 38 35
 #endif
 #ifndef PITCH_MIN
-#define PITCH_MIN -40 //-20 -30 -40 fix -35 -30 -35
+#define PITCH_MIN -30 //-20 -30 -40 fix -35 -30 -35
 #endif
 #ifndef RUDDER_MIX
 #define RUDDER_MIX 0.30f

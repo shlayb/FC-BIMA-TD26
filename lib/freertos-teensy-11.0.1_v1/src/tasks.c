@@ -4071,6 +4071,7 @@ BaseType_t xTaskResumeAll( void )
 }
 /*-----------------------------------------------------------*/
 
+
 TickType_t xTaskGetTickCount( void )
 {
     TickType_t xTicks;

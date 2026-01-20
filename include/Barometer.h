@@ -4,7 +4,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
-#include "Drivers/MS5611.h"
+#include "drivers/ms5611.h"
 #include "Filter.h"
 #include <Filter/Filter.h>
 
@@ -180,7 +180,7 @@ bool Barometer::reached_approach_alt(float current_alt) {
 
 bool Barometer::init_baro() {
     _I2C1.init();
-    kalman.initializeKalman(5, 0.12, 0.8);
+    kalman.initializeKalman(5, 0.1, 1);
     reset();
     setOversampling();
     // vTaskDelay(pdMS_TO_TICKS(100));
@@ -206,5 +206,11 @@ void Barometer::update_baro() {
 
     // lpfbaro.apply(altitude, 0.02f); 
     altitude = kalman.kalmanFilter(altitude);
+    
+    // Simple altitude limiter: if above 120m, randomize between 110-120m
+    // if (altitude > 120.0f) {
+    //     // Generate random value between 110 and 120
+    //     float randomOffset = (float)(random(0, 1000)) / 100.0f; // 0.00 to 10.00
+    //     altitude = 110.0f + randomOffset; // 110.0 to 120.0
+    // }
 }
-

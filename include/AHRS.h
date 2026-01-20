@@ -35,12 +35,6 @@
 #include "bno055.h"
 #include "gps.h"
 
-
-
-
-
-
-
 Gepees gepees(0, 1, 38400);
 Airspeed arspd;
 IMU imu;
@@ -227,7 +221,7 @@ void AHRS::driftCorrection() {
     bool is_gps_fix = gepees.age > 0 && gepees.age < 3000;
 
     if (is_gps_fix || gepees.gps_status >= GPS_FIX_3D || gepees.gps.speed.isUpdated()) {
-        groundspeed = gepees.speed_mps * 100;  // ini dicek lagiiiii
+        groundspeed = gepees.speed_mps;  // ini dicek lagiiiii
         velocity_vector = gepees.velocity;
         is_gps_lock = true;
     } else if (haveGPS()) {
