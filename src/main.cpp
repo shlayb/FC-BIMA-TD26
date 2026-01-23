@@ -495,9 +495,9 @@ void setup() {
     }
     loop_timer = micros();
 
-    xTaskCreate(Print_To_Raspi, "PrintRaspi", 4096, NULL, 3, &Task_Raspi);
-    xTaskCreate(Print_telem, "Telem", 2048, NULL, 2, &Task_Telem);
-    // xTaskCreate(Print_task, "Print", 4096, NULL, 3, &Task_Print);
+    // xTaskCreate(Print_To_Raspi, "PrintRaspi", 4096, NULL, 3, &Task_Raspi);
+    // xTaskCreate(Print_telem, "Telem", 2048, NULL, 2, &Task_Telem);
+    xTaskCreate(Print_task, "Print", 4096, NULL, 3, &Task_Print);
     xTaskCreate(radio, "Radio", 4096, NULL, 3, &Task_Print);
     xTaskCreate(airspeed, "Airspeed", 4096, NULL, 2, &Task_Print);
     xTaskCreate(controlThd, "Control", 4096, NULL, 2, &Task_Control);

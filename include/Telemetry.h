@@ -449,7 +449,7 @@ void Telemetry::send_vehicle_attitude_data() {
 					imu.delta_roll, //aileron
 					0,  // elevator
 					0, // rudder
-					display_wp(),
+					display_wp(), // jumlah wp
 				    nav_roll_deg,//---roll_demand, 
 					nav_pitch_deg, //calc_nav_pitch, //---pitch_demand,
 				  	0, //--yaw demand
