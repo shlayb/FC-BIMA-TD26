@@ -81,7 +81,7 @@ void updateFBWA_FW()
 /** calculate roll from navigation controller */
 void calc_nav_roll()
 {
-    float commanded_roll = (nav_roll_cd())/100; //kalau arm kedalam navroll nya mines
+    float commanded_roll = -((nav_roll_cd())/100); //kalau arm kedalam navroll nya mines
     // cmdroll = commanded_roll;
     nav_roll_deg = constrain(commanded_roll, -36, 36);
     // update_load_factor();

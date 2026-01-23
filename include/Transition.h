@@ -137,8 +137,8 @@ void auto_init() {
 
     auto_state.next_wp_crosstrack = false;
 
-    target_altitude.amsl_cm = waypoint[0].alt;
-    // target_altitude.amsl_cm = 69.0f * M_TO_CM;
+    // target_altitude.amsl_cm = waypoint[0].alt;
+    target_altitude.amsl_cm = 69.0f * M_TO_CM;
     target_airspeed = AIRSPEED_CRUISE;
 }
 \
@@ -147,7 +147,7 @@ void auto_exit() {
     auto_navigation_mode = false;
 }
 
-void Transition_sequence_manual() {
+void Transition_sequence_manual_new() {
     static uint8_t last_mode = 0;
 
     ahrs.update_ahrs();
@@ -191,7 +191,7 @@ void Transition_sequence_manual() {
 
         navigate();
         update_speed_height();
-            update_alt();
+        update_alt();
         updateAuto_FW();
 
         stabilize();
@@ -205,7 +205,7 @@ void Transition_sequence_manual() {
 }
 
 // manual transistion flywing
-void Transition_sequence_manual_old() {
+void Transition_sequence_manual() {
     // vertical_velocity = get_climb_rate();
     // parameter changer for manual/auto
     ahrs.update_ahrs();
@@ -224,7 +224,7 @@ void Transition_sequence_manual_old() {
     else if (mode_now == 2) {
         mode_fbwa_plane = true;
         auto_navigation_mode = false;
-        // updateFBWA_FW();
+        updateFBWA_FW();
         stabilize();
         servos_out_fbwa();
         plane_motors_out();  // TODO:crosschecking (sblmnya plane_motors_out_auto(1900))
