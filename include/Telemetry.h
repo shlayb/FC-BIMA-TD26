@@ -91,14 +91,14 @@ void Telemetry::pid_gain_tuning() {
             }
         }
     }
-    Serial2.print("1)PR: ");
-    Serial2.print(r_gain.roll_P);
-    Serial2.print(" | 2)DR: ");
-    Serial2.print(r_gain.roll_D);
-    Serial2.print(" | 3)PP: ");
-    Serial2.print(p_gain.pitch_P);
-    Serial2.print(" | 4)PD: ");
-    Serial2.print(p_gain.pitch_D);
+    // Serial2.print("1)PR: ");
+    // Serial2.print(r_gain.roll_P);
+    // Serial2.print(" | 2)DR: ");
+    // Serial2.print(r_gain.roll_D);
+    // Serial2.print(" | 3)PP: ");
+    // Serial2.print(p_gain.pitch_P);
+    // Serial2.print(" | 4)PD: ");
+    // Serial2.print(p_gain.pitch_D);
 
     // Serial2.print("YP: ");
     // Serial2.print(gain.rate_yaw_P);
@@ -124,14 +124,14 @@ void Telemetry::pid_gain_tuning() {
     // Serial2.print(modeCode4(current));
     Serial2.print(" |Mode: ");
     Serial2.print(mode_now);
-    Serial2.print(" |ch_roll: ");
-    Serial2.print(ch_roll);
-    Serial2.print(" |ch_pitch: ");
-    Serial2.print(ch_pitch);
-    Serial2.print(" |ch_yaw: ");
-    Serial2.print(ch_yaw);
-    Serial2.print(" |ch_thr: ");
-    Serial2.print(ch_throttle);
+    // Serial2.print(" |ch_roll: ");
+    // Serial2.print(ch_roll);
+    // Serial2.print(" |ch_pitch: ");
+    // Serial2.print(ch_pitch);
+    // Serial2.print(" |ch_yaw: ");
+    // Serial2.print(ch_yaw);
+    // Serial2.print(" |ch_thr: ");
+    // Serial2.print(ch_throttle);
     // Serial2.print(" |gx:");
     // Serial2.print(imu.gyro_x);
     // Serial2.print(" |gy:");
@@ -167,12 +167,12 @@ void Telemetry::pid_gain_tuning() {
     // Serial2.print(phase_now);
     // Serial2.print(" |alt:");
     // Serial2.print(baro.altitude);
-    // Serial2.print(" wpsum:");
-    // Serial2.print(wp_sum);
-    // Serial2.print(" wp:");
-    // Serial2.print(flag_wp);
-    // Serial2.print(" dist:");
-    // Serial2.print(auto_state.distance_next_wp/*current_loc.get_distance(next_WP_loc)*/);
+    Serial2.print(" wpsum:");
+    Serial2.print(wp_sum);
+    Serial2.print(" wp:");
+    Serial2.print(flag_wp);
+    Serial2.print(" dist:");
+    Serial2.print(auto_state.distance_next_wp/*current_loc.get_distance(next_WP_loc)*/);
     // Serial2.print(" | r:");
     // Serial2.print(imu.roll);
     // Serial2.print(" | p:");
@@ -181,10 +181,10 @@ void Telemetry::pid_gain_tuning() {
     // Serial2.print(rad_pitch);
     // Serial2.print(" | y:");
     // Serial2.print(imu.yaw);
-    // Serial2.print(" |hdop:");
-    // Serial2.print(gepees.hdop);
-    // Serial2.print(" |sat:");
-    // Serial2.print(gepees.satellites);
+    Serial2.print(" |hdop:");
+    Serial2.print(gepees.hdop);
+    Serial2.print(" |sat:");
+    Serial2.print(gepees.satellites);
     // Serial2.print(" mode: ");
     // Serial2.print(modeCode4(current));
     // Serial2.print(" MHOV: ");

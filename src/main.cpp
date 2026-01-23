@@ -446,20 +446,20 @@ void wp_setup() {
     //  add_waypoint(-77669100, 1102339700, 90 * M_TO_CM, 6);  // wp6
 
     //WP SIMULASI 1
-    add_waypoint(-77671400, 1102340100, 90 * M_TO_CM, 1);  // wp1 
-    add_waypoint(-77679300, 1102340400, 100 * M_TO_CM, 2);  // wp2 
-    add_waypoint(-77683800, 1102345800, 110 * M_TO_CM, 3);  // wp3
-    add_waypoint(-77683400, 1102354100, 110 * M_TO_CM, 4);  // wp4
-    add_waypoint(-77658400, 1102364200, 110 * M_TO_CM, 5);  // wp5
-    add_waypoint(-77652000, 1102359400, 110 * M_TO_CM, 6);  // wp6
-    add_waypoint(-77650400, 1102348200, 100 * M_TO_CM, 7);  // wp7
-    add_waypoint(-77660000, 1102341800, 90 * M_TO_CM, 8);  // wp8
-    add_waypoint(-77672500, 1102336300, 90 * M_TO_CM, 9);  // wp9
+    // add_waypoint(-77671400, 1102340100, 90 * M_TO_CM, 1);  // wp1 
+    // add_waypoint(-77679300, 1102340400, 100 * M_TO_CM, 2);  // wp2 
+    // add_waypoint(-77683800, 1102345800, 110 * M_TO_CM, 3);  // wp3
+    // add_waypoint(-77683400, 1102354100, 110 * M_TO_CM, 4);  // wp4
+    // add_waypoint(-77658400, 1102364200, 110 * M_TO_CM, 5);  // wp5
+    // add_waypoint(-77652000, 1102359400, 110 * M_TO_CM, 6);  // wp6
+    // add_waypoint(-77650400, 1102348200, 100 * M_TO_CM, 7);  // wp7
+    // add_waypoint(-77660000, 1102341800, 90 * M_TO_CM, 8);  // wp8
+    // add_waypoint(-77672500, 1102336300, 90 * M_TO_CM, 9);  // wp9
 
     // tes wp D13
-    // add_waypoint(-77738260, 1103784420, 2 * M_TO_CM, 1);
-    // add_waypoint(-77732600, 1103786320, 2 * M_TO_CM, 2);
-    // add_waypoint(-77746550, 1103782450, 2 * M_TO_CM, 3);
+    add_waypoint(-77738260, 1103784420, 2 * M_TO_CM, 1);
+    add_waypoint(-77732600, 1103786320, 2 * M_TO_CM, 2);
+    add_waypoint(-77746550, 1103782450, 2 * M_TO_CM, 3);
 
     // test waypoint D13 yang mirip di hanggar Sumberarum
     //  add_waypoint(-77666500, 1102331000, 90 * M_TO_CM, 1);
@@ -496,8 +496,8 @@ void setup() {
     loop_timer = micros();
 
     // xTaskCreate(Print_To_Raspi, "PrintRaspi", 4096, NULL, 3, &Task_Raspi);
-    // xTaskCreate(Print_telem, "Telem", 2048, NULL, 2, &Task_Telem);
-    xTaskCreate(Print_task, "Print", 4096, NULL, 3, &Task_Print);
+    xTaskCreate(Print_telem, "Telem", 2048, NULL, 2, &Task_Telem);
+    // xTaskCreate(Print_task, "Print", 4096, NULL, 3, &Task_Print);
     xTaskCreate(radio, "Radio", 4096, NULL, 3, &Task_Print);
     xTaskCreate(airspeed, "Airspeed", 4096, NULL, 2, &Task_Print);
     xTaskCreate(controlThd, "Control", 4096, NULL, 2, &Task_Control);

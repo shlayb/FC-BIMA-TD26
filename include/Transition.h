@@ -224,7 +224,7 @@ void Transition_sequence_manual_old() {
     else if (mode_now == 2) {
         mode_fbwa_plane = true;
         auto_navigation_mode = false;
-        updateFBWA_FW();
+        // updateFBWA_FW();
         stabilize();
         servos_out_fbwa();
         plane_motors_out();  // TODO:crosschecking (sblmnya plane_motors_out_auto(1900))
