@@ -147,9 +147,13 @@ void Transition_sequence_manual() {
     } else if (mode_now == 2) {
         mode_fbwa_plane = true;
         auto_navigation_mode = false;
-        updateFBWA_FW();
-        stabilize();
-        servos_out_fbwa();
+        // updateFBWA_FW();
+        // stabilize();
+        // servos_out_fbwa();
+        fw_fbwa.updateFBWA_FW(ch_roll, ch_pitch, ch_yaw, ch_throttle,
+                            imu.roll, imu.pitch, imu.yaw,
+                            imu.gyro_y, imu.gyro_x, imu.gyro_z);
+        fw_servos_out_fbwa();
         plane_motors_out();  // TODO:crosschecking (sblmnya plane_motors_out_auto(1900))
         mode_phase = 2;
         MODE = fbwa->mode();  // pusher.writeMicroseconds(ch_throttle);

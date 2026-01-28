@@ -32,7 +32,7 @@ bool transition_phase3 = false;
 bool mode_vtol = false;
 bool mode_safety = false;
 bool mode_vtol_plane = false;
-int mode_now, prev_mode;
+int mode_now = 2, prev_mode;
 
 float outputScaler(uint16_t ch)
 // scaling data dr remote biar bs masuk ke perhitungan kendali, konversi ke bentuk sudut

@@ -119,7 +119,7 @@ AHRS::AHRS()
       windspeed(),
       windspeed_x(0.0f),
       last_airspeed(0.0f) {}
-
+      
 bool AHRS::haveGPS() const {
     return gepees.gps_status > GPS_NO_FIX;
 }
