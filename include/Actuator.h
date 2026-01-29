@@ -23,12 +23,12 @@
 // #define MOTOR_4_PIN  13
 
 // PIN FC BARU
-#define SERVO_AIL_L 2  
-#define SERVO_ELE 4    
-#define THROTTLE 6
-#define SERVO_RUD_L 10
-#define SERVO_AIL_R 12
-#define SERVO_RUD_R 14
+#define SERVO_AIL_L 2  // mtr 1
+#define SERVO_ELE 4    //mtr 2
+#define THROTTLE 3   // mtr 3
+#define SERVO_RUD_L 10  // mtr 4
+#define SERVO_AIL_R 12  // mtr 5
+#define SERVO_RUD_R 14  // mtr 6
 // #define MOTOR_1_PIN 3  //FC pin 7
 // #define MOTOR_2_PIN 5  //FC pin 8
 // #define MOTOR_3_PIN 9  //FC pin 9
