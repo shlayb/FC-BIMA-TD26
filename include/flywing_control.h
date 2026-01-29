@@ -94,13 +94,13 @@ void FlywingControl::flywing_control_stabilize(int16_t ch_r, int16_t ch_p, int16
     flywing_getIntegral(ch_thr, roll, pitch, yaw);
     // copter_getIntegral(ch_thr, roll, pitch, yaw);
 
-    this->roll_cmd = -1.3*(map(ch_r - 1500, min_roll_corr, max_roll_corr, this->limits.flywing_min_roll, this->limits.flywing_max_roll));
-    this->pitch_cmd = 1.1*(map(ch_p - 1500, min_pitch_corr, max_pitch_corr, this->limits.flywing_min_pitch, this->limits.flywing_max_pitch));
-    this->u2 = ((-this->gain_flywing.k_roll * (roll + this->roll_i - (this->roll_cmd + trim_roll))) + (-this->gain_flywing.k_roll_rate * (gy)));
-    this->u3 = (-this->gain_flywing.k_pitch * ((-pitch) + this->pitch_i - (this->pitch_cmd + trim_pitch))) + (-this->gain_flywing.k_pitch_rate * (gx));
-    this->servos[0] = (invers_matrix[0][0] * this->u2 + invers_matrix[0][1] * this->u3);
-    this->servos[1] = (invers_matrix[1][0] * this->u2 + invers_matrix[1][1] * this->u3);
-    this->last_heading = this->heading_now;
+    // this->roll_cmd = -1.3*(map(ch_r - 1500, min_roll_corr, max_roll_corr, this->limits.flywing_min_roll, this->limits.flywing_max_roll));
+    // this->pitch_cmd = 1.1*(map(ch_p - 1500, min_pitch_corr, max_pitch_corr, this->limits.flywing_min_pitch, this->limits.flywing_max_pitch));
+    // this->u2 = ((-this->gain_flywing.k_roll * (roll + this->roll_i - (this->roll_cmd + trim_roll))) + (-this->gain_flywing.k_roll_rate * (gy)));
+    // this->u3 = (-this->gain_flywing.k_pitch * ((-pitch) + this->pitch_i - (this->pitch_cmd + trim_pitch))) + (-this->gain_flywing.k_pitch_rate * (gx));
+    // this->servos[0] = (invers_matrix[0][0] * this->u2 + invers_matrix[0][1] * this->u3);
+    // this->servos[1] = (invers_matrix[1][0] * this->u2 + invers_matrix[1][1] * this->u3);
+    // this->last_heading = this->heading_now;
     // last_alt = alt_setpoint;c
 }
 

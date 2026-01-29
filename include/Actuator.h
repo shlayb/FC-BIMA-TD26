@@ -5,6 +5,7 @@
 #include <Servo.h>
 #include "FW_ControlModes.h"
 #include "Copter_Control.h"
+#include "FW_control_fbwa.h"
 // #include "copter_control_nyt.h"
 #include "flywing_control.h"
 #include "TECS.h"
@@ -42,6 +43,8 @@ Servo rudder_L;
 Servo rudder_R;
 Servo pusher;
 
+FW_FWBA fw_fbwa;
+
 float u_roll, u_pitch, u_yaw, u_yaw_cmd;
 float m1_pwm, m2_pwm, m3_pwm, m4_pwm;
 float servo_L, servo_R;
@@ -62,6 +65,7 @@ uint16_t servo_min = 988;
 uint16_t pwm_ail_L;
 uint16_t pwm_ail_R;
 uint16_t pwm_ele;
+uint16_t pwm_rud;
 uint16_t pwm_rud_L;
 uint16_t pwm_rud_R;
 uint16_t throttle;
@@ -195,6 +199,21 @@ void servos_out_manual() {
     elevator.writeMicroseconds((ch_pitch));
     rudder_L.writeMicroseconds(ch_yaw);
     rudder_R.writeMicroseconds(ch_yaw);
+}
+
+void fw_servos_out_fbwa() {
+    // Hitung output servo dari kontrol pitch, roll, yaw
+    pwm_ail_L = fw_fbwa.servos[0] + 1500;
+    pwm_ail_R = fw_fbwa.servos[1] + 1500;       
+    pwm_ele   = fw_fbwa.servos[2] + 1500;
+    pwm_rud   = fw_fbwa.servos[3] + 1500;
+
+    // Output ke servo
+    aileron_L.writeMicroseconds(pwm_ail_L);
+    aileron_R.writeMicroseconds(pwm_ail_R);
+    elevator.writeMicroseconds(pwm_ele);
+    rudder_L.writeMicroseconds(pwm_rud);
+    rudder_R.writeMicroseconds(pwm_rud);
 }
 
 /////////////for flywing////////////////////////
