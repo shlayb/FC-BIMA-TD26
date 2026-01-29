@@ -6,7 +6,7 @@
 #include "airspeed.h"
 #include "gps.h"
 #include "Voltage.h"
-#include "flywing_control.h"
+// #include "flywing_control.h"
 #include "TimingUtils.h"
 // #include "mode_setup.h"
 #include "fuzzy_fw_roll.h"
@@ -86,12 +86,43 @@ void Telemetry::pid_gain_tuning() {
                 case 'f':
                     modifygain(p_gain.pitch_D, -0.01);
                     break;
+                // debug mode auto tanpa remote
+                case 'z':
+                    mode_now = 1;
+                    Serial.println("mode 1");
+                    break;
+                case 'x':
+                    Serial.println("mode 2");
+                    mode_now = 2;
+                    break;
+                case 'c':
+                    Serial.println("mode 3");
+                    mode_now = 3;
+                    break;
                 default:
                     break;
             }
         }
     }
-    // Serial2.print("1)PR: ");
+    //  ====== DEBUG MODE AUTO ======
+    // Serial2.print("|Mode now: ");
+    // Serial2.print(mode_now);
+    // Serial2.print("|Prev mode: ");
+    // Serial2.print(prev_mode);
+    // Serial2.print("|cur_lat:");
+    // Serial2.print(current_loc.lat);
+    // Serial2.print("|cur_lng:");
+    // Serial2.print(current_loc.lng);
+    // Serial2.print("|next_crosstrk:");
+    // Serial2.print(auto_state.next_wp_crosstrack);
+    // Serial2.print("|crosstrk:");
+    // Serial2.print(auto_state.crosstrack);
+    // Serial2.print("|nwp_lat:");
+    // Serial2.print(next_WP_loc.lat);
+    // Serial2.print("|nwp_lng:");
+    // Serial2.print(next_WP_loc.lng);
+    // ==============================
+    // Serial2.print("1)PR: "); 
     // Serial2.print(r_gain.roll_P);
     // Serial2.print(" | 2)DR: ");
     // Serial2.print(r_gain.roll_D);
@@ -110,20 +141,24 @@ void Telemetry::pid_gain_tuning() {
     // Serial2.print(flywingcontrol.gain_flywing.k_pitch_rate);
     Serial2.print(" |Arm: ");
     Serial2.print(arming);
-    Serial2.print(" |R: ");
-    Serial2.print(imu.roll);
-    Serial2.print(" |P: ");
-    Serial2.print(imu.pitch);
-    Serial2.print(" |Y: ");
-    Serial2.print(imu.yaw);
+    // ---------------------------------
+    // Serial2.print(" |R: ");
+    // Serial2.print(imu.roll);
+    // Serial2.print(" |P: ");
+    // Serial2.print(imu.pitch);
+    // Serial2.print(" |Y: ");
+    // Serial2.print(imu.yaw);
+    // ---------------------------------
     Serial2.print(" |head:");
     Serial2.print(imu.heading);
     Serial2.print(" |alt = ");
     Serial2.print(baro.altitude);
     // Serial2.print(" |Mode: ");
     // Serial2.print(modeCode4(current));
-    Serial2.print(" |Mode: ");
-    Serial2.print(mode_now);
+    // ---------------------------------
+    // Serial2.print(" |Mode: ");
+    // Serial2.print(mode_now);
+    // ---------------------------------
     // Serial2.print(" |ch_roll: ");
     // Serial2.print(ch_roll);
     // Serial2.print(" |ch_pitch: ");
