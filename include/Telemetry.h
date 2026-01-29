@@ -87,18 +87,18 @@ void Telemetry::pid_gain_tuning() {
                     modifygain(p_gain.pitch_D, -0.01);
                     break;
                 // debug mode auto tanpa remote
-                case 'z':
-                    mode_now = 1;
-                    Serial.println("mode 1");
-                    break;
-                case 'x':
-                    Serial.println("mode 2");
-                    mode_now = 2;
-                    break;
-                case 'c':
-                    Serial.println("mode 3");
-                    mode_now = 3;
-                    break;
+                // case 'z':
+                //     mode_now = 1;
+                //     Serial.println("mode 1");
+                //     break;
+                // case 'x':
+                //     Serial.println("mode 2");
+                //     mode_now = 2;
+                //     break;
+                // case 'c':
+                //     Serial.println("mode 3");
+                //     mode_now = 3;
+                //     break;
                 default:
                     break;
             }
