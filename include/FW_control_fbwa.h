@@ -29,7 +29,7 @@ class FW_FWBA {
     signed char selector[4][3] = {
         { 1,  0,  0},   // aileron right
         { 1,  0,  0},   // aileron left
-        { 0, 1,  0},   // elevator
+        { 0, -1,  0},   // elevator
         { 0,  0,  1}    // rudder
     };
     void updateFBWA_FW(int16_t ch_r, int16_t ch_p, int16_t ch_y, int16_t ch_thr,
