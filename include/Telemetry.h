@@ -105,22 +105,22 @@ void Telemetry::pid_gain_tuning() {
         }
     }
     //  ====== DEBUG MODE AUTO ======
-    // Serial2.print("|Mode now: ");
-    // Serial2.print(mode_now);
-    // Serial2.print("|Prev mode: ");
-    // Serial2.print(prev_mode);
-    // Serial2.print("|cur_lat:");
-    // Serial2.print(current_loc.lat);
-    // Serial2.print("|cur_lng:");
-    // Serial2.print(current_loc.lng);
-    // Serial2.print("|next_crosstrk:");
-    // Serial2.print(auto_state.next_wp_crosstrack);
-    // Serial2.print("|crosstrk:");
-    // Serial2.print(auto_state.crosstrack);
-    // Serial2.print("|nwp_lat:");
-    // Serial2.print(next_WP_loc.lat);
-    // Serial2.print("|nwp_lng:");
-    // Serial2.print(next_WP_loc.lng);
+    Serial2.print("|Mode now: ");
+    Serial2.print(mode_now);
+    Serial2.print("|Prev mode: ");
+    Serial2.print(prev_mode);
+    Serial2.print("|cur_lat:");
+    Serial2.print(current_loc.lat);
+    Serial2.print("|cur_lng:");
+    Serial2.print(current_loc.lng);
+    Serial2.print("|next_crosstrk:");
+    Serial2.print(auto_state.next_wp_crosstrack);
+    Serial2.print("|crosstrk:");
+    Serial2.print(auto_state.crosstrack);
+    Serial2.print("|nwp_lat:");
+    Serial2.print(next_WP_loc.lat);
+    Serial2.print("|nwp_lng:");
+    Serial2.print(next_WP_loc.lng);
     // ==============================
     // Serial2.print("1)PR: "); 
     // Serial2.print(r_gain.roll_P);
