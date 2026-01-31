@@ -32,7 +32,6 @@ float init_pwm_land;
 float k_p = 0.0;
 float k_i = 0.0;
 float k_d = 0.0;
-int autonav_state = 0;  /// variable to check auto-loop state, delete after testing
 bool enterauto = false;
 int32_t temp_alt = 0;
 
@@ -86,20 +85,14 @@ void navigate() {
     if (auto_state.distance_next_wp <= acceptance_distance_m || current_loc.past_interval_finish_line(prev_WP_loc, next_WP_loc)) {
         if (auto_navigation_mode) {
             flag_wp++;
-            autonav_state = 0;
             if (flag_wp >= wp_sum) {
                 flag_wp = -1;
                 auto_navigation_mode = false;
                 mode_fbwa = true;
-                autonav_state = 3;  // checking purpose only, to check condition, gonna delete this afterward
-            } else if (flag_wp == wp_sum) {
-                // auto_navigation_mode = false;
-            }  // checking purpose only, to check condition, gonna delete this afterward
-            else {
+            } else {
                 auto_state.next_wp_crosstrack = true;
                 target_altitude.amsl_cm = waypoint[flag_wp].alt;
                 set_next_WP(waypoint[flag_wp]);
-                autonav_state = 1;  // checking purpose only, to check condition, gonna delete this afterward
             }
         }
     }
@@ -125,15 +118,15 @@ void updateAuto_FW() {
 }
 
 void exit_auto(){
-    Serial.println("EXIT AUTO MODE");
+    Serial2.println("EXIT AUTO MODE");
     enterauto = false;
     auto_throttle_mode = false;
     auto_navigation_mode = false;
-    Serial.print("flag_wp tersimpan: "); Serial.println(flag_wp);
+    Serial2.print("flag_wp tersimpan: "); Serial2.println(flag_wp);
 }
 
 void init_auto(){
-    Serial.println(" INIT AUTO MODE ");
+    Serial2.println("INIT AUTO MODE");
     auto_throttle_mode = true;
     auto_navigation_mode = true;
     auto_loiter_mode = false;
@@ -141,7 +134,7 @@ void init_auto(){
     // Cek apakah ini first entry atau resume
     if (flag_wp == -1) {
         // First entry: mulai dari awal
-        Serial.println("First entry - Start from WP 0 (HOME)");
+        Serial2.println("First entry - Start from WP 0 (HOME)");
         prev_WP_loc = current_loc = next_WP_loc;
         flag_wp = -1;  // akan jadi 0 di navigate()
         
@@ -150,18 +143,18 @@ void init_auto(){
         waypoint[0].lng = gepees.longitude * 10000000;
         waypoint[0].alt = 69 * M_TO_CM;
         
-        Serial.print("HOME set - lat:"); Serial.print(waypoint[0].lat);
-        Serial.print(" lng:"); Serial.print(waypoint[0].lng);
-        Serial.print(" alt:"); Serial.println(waypoint[0].alt);
+        Serial2.print("HOME set - lat:"); Serial2.print(waypoint[0].lat);
+        Serial2.print(" lng:"); Serial2.print(waypoint[0].lng);
+        Serial2.print(" alt:"); Serial2.println(waypoint[0].alt);
     } 
     else {
         // Resume: lanjut dari WP terakhir
-        Serial.print("Resume from WP "); Serial.println(flag_wp);
+        Serial2.print("Resume from WP "); Serial2.println(flag_wp);
         
         // Pastikan flag_wp masih valid
         if (flag_wp >= wp_sum) {
             flag_wp = -1;  // reset jika sudah selesai semua
-            Serial.println("All WP completed - restart from WP 0 (HOME)");
+            Serial2.println("All WP completed - restart from WP 0 (HOME)");
             prev_WP_loc = current_loc = next_WP_loc;
             
             // Update HOME lagi dengan posisi terkini
@@ -174,9 +167,9 @@ void init_auto(){
             target_altitude.amsl_cm = waypoint[flag_wp].alt;
             set_next_WP(waypoint[flag_wp]);
             
-            Serial.print("Target WP - lat:"); Serial.print(waypoint[flag_wp].lat);
-            Serial.print(" lng:"); Serial.print(waypoint[flag_wp].lng);
-            Serial.print(" alt:"); Serial.println(waypoint[flag_wp].alt);
+            Serial2.print("Target WP - lat:"); Serial2.print(waypoint[flag_wp].lat);
+            Serial2.print(" lng:"); Serial2.print(waypoint[flag_wp].lng);
+            Serial2.print(" alt:"); Serial2.println(waypoint[flag_wp].alt);
         }
     }
     
@@ -184,14 +177,25 @@ void init_auto(){
     target_airspeed = AIRSPEED_CRUISE;
     enterauto = true;
     
-    Serial.print("Total WP: "); Serial.print(wp_sum);
-    Serial.print(" | Current flag_wp: "); Serial.println(flag_wp);
+    Serial2.print("Total WP: "); Serial2.print(wp_sum);
+    Serial2.print(" | Current flag_wp: "); Serial2.println(flag_wp);
 }
 
+// manual transistion fixed wing 
 void Transition_sequence_manual() {
+    static uint32_t last_wp_update = 0;
+
+    // vertical_velocity = get_climb_rate();
+    // parameter changer for manual/auto
     ahrs.update_ahrs();
-    nav_gps();
+    nav_gps();  // get_position() inside here
     
+    // update next WP setiap 1 detik
+    if(mode_now != 3 && millis() - last_wp_update > 1000){
+        auto_state.distance_next_wp = current_loc.get_distance(next_WP_loc);
+        last_wp_update = millis();
+    }
+
     if (mode_now == 1) {
         if (prev_mode == 3) {
             exit_auto();
@@ -200,7 +204,7 @@ void Transition_sequence_manual() {
         mode_fbwa_plane = false;
         auto_navigation_mode = false;
         servos_out_manual();
-        plane_motors_out();
+        plane_motors_out();  // pusher.writeMicroseconds(988);
         mode_phase = 1;
         MODE = manual->mode();
     }
