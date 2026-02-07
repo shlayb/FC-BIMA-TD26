@@ -15,7 +15,7 @@ struct FW_gain
   //fix
   float rate_pitch_P    = 10.00f; //2.50f;
   float rate_pitch_I    = 0.00f; //0.01f;
-  float rate_pitch_D    = 0.00f; //0.13f;
+  float rate_pitch_D    = 0.20f; //0.13f;
   float rate_pitch_IMAX = 500.0f;
 
   float rate_yaw_P      = 0.00f; //20.0f;
@@ -28,8 +28,8 @@ class FW_FWBA {
   public:
     signed char selector[4][3] = {
         { 1,  0,  0},   // aileron right
-        { 1,  0,  0},   // aileron left
-        { 0, -1,  0},   // elevator
+        { 1,  0,  0},   // aileron left 
+        { 0,  -1,  0},   // elevator //trainer +, wahana -
         { 0,  0,  1}    // rudder
     };
     void updateFBWA_FW(int16_t ch_r, int16_t ch_p, int16_t ch_y, int16_t ch_thr,
@@ -77,17 +77,17 @@ void FW_FWBA::updateFBWA_FW(int16_t ch_r, int16_t ch_p, int16_t ch_y, int16_t ch
     roll_cmd  = 1.3f*(map(ch_r - 1500, min_roll_corr,  max_roll_corr,  min_roll,  max_roll));
     pitch_cmd = 1.1f*(map(ch_p - 1500, min_pitch_corr, max_pitch_corr, min_pitch, max_pitch));
     // yaw_cmd   = 1.0f*(map(ch_y - 1500, min_roll_corr,  max_roll_corr,  min_roll,  max_roll));
-    Serial.print("Roll :");
-    Serial.print(roll);
-    Serial.print(" |Pitch:");
-    Serial.print(pitch);
+    // Serial.print("Roll :");
+    // Serial.print(roll);
+    // Serial.print(" |Pitch:");
+    // Serial.print(pitch);
 
-    u_roll = ((-fw_gain.rate_roll_P * (roll + roll_int - (roll_cmd + trim_roll))) + (-fw_gain.rate_roll_D * (gy)));
-    Serial.print(" |u_roll:");
-    Serial.print(u_roll);
+    u_roll = ((-fw_gain.rate_roll_P * (-roll + roll_int - (roll_cmd + trim_roll))) + (-fw_gain.rate_roll_D * (gy)));
+    // Serial.print(" |u_roll:");
+    // Serial.print(u_roll);
     u_pitch = ((fw_gain.rate_pitch_P * (-pitch + pitch_int - (pitch_cmd + trim_pitch))) + (-fw_gain.rate_pitch_D * (gx)));
-    Serial.print(" |u_pitch:");
-    Serial.print(u_pitch);
+    // Serial.print(" |u_pitch:");
+    // Serial.print(u_pitch);
 
     servos[0] = (selector[0][0] * u_roll + selector[0][1] * u_pitch + selector[0][2] * u_yaw); // aileron right
     servos[1] = (selector[1][0] * u_roll + selector[1][1] * u_pitch + selector[1][2] * u_yaw); // aileron left
@@ -99,14 +99,14 @@ void FW_FWBA::updateFBWA_FW(int16_t ch_r, int16_t ch_p, int16_t ch_y, int16_t ch
     servos[2] = constrain(servos[2], -400, 400) ;
     servos[3] = constrain(servos[3], -400, 400) ;
 
-    Serial.print(" |ail_L:");
-    Serial.print(servos[1]);
-    Serial.print(" |ail_R:");
-    Serial.print(servos[0]);
-    Serial.print(" |ele:");
-    Serial.print(servos[2]);
-    Serial.print(" |rud:");
-    Serial.println(servos[3]);
+    // Serial.print(" |ail_L:");
+    // Serial.print(servos[1]);
+    // Serial.print(" |ail_R:");
+    // Serial.print(servos[0]);
+    // Serial.print(" |ele:");
+    // Serial.print(servos[2]);
+    // Serial.print(" |rud:");
+    // Serial.println(servos[3]);
 
 }
 

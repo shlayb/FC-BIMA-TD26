@@ -6,6 +6,8 @@
 #include "airspeed.h"
 #include "gps.h"
 #include "Voltage.h"
+#include "FW_control_fbwa.h"
+
 // #include "flywing_control.h"
 #include "TimingUtils.h"
 // #include "mode_setup.h"
@@ -46,6 +48,8 @@ void modifygain(float &prev_gain, float new_gain) {
  *
  */
 
+FW_gain gains;
+
 int linee = 0;
 int milisawall = 0;
 void Telemetry::pid_gain_tuning() {
@@ -56,35 +60,35 @@ void Telemetry::pid_gain_tuning() {
             switch (selector) {
                 case 'Q':
                 case 'q':
-                    modifygain(r_gain.roll_P, 0.01);
+                    modifygain(gains.rate_roll_P, 0.01);
                     break;
                 case 'A':
                 case 'a':
-                    modifygain(r_gain.roll_P, -0.01);
+                    modifygain(gains.rate_roll_P, -0.01);
                     break;
                 case 'W':
                 case 'w':
-                    modifygain(r_gain.roll_D, 0.01);
+                    modifygain(gains.rate_roll_D, 0.01);
                     break;
                 case 'S':
                 case 's':
-                    modifygain(r_gain.roll_D, -0.01);
+                    modifygain(gains.rate_roll_D, -0.01);
                     break;
                 case 'E':
                 case 'e':
-                    modifygain(p_gain.pitch_P, 0.01);
+                    modifygain(gains.rate_pitch_P, 0.01);
                     break;
                 case 'D':
                 case 'd':
-                    modifygain(p_gain.pitch_P, -0.01);
+                    modifygain(gains.rate_pitch_P, -0.01);
                     break;
                 case 'R':
                 case 'r':
-                    modifygain(p_gain.pitch_D, 0.01);
+                    modifygain(gains.rate_pitch_D, 0.01);
                     break;
                 case 'F':
                 case 'f':
-                    modifygain(p_gain.pitch_D, -0.01);
+                    modifygain(gains.rate_pitch_D, -0.01);
                     break;
                 // debug mode auto tanpa remote
                 // case 'z':
@@ -109,27 +113,28 @@ void Telemetry::pid_gain_tuning() {
     Serial2.print(mode_now);
     Serial2.print("|Prev mode: ");
     Serial2.print(prev_mode);
-    Serial2.print("|cur_lat:");
-    Serial2.print(current_loc.lat);
-    Serial2.print("|cur_lng:");
-    Serial2.print(current_loc.lng);
-    Serial2.print("|next_crosstrk:");
-    Serial2.print(auto_state.next_wp_crosstrack);
-    Serial2.print("|crosstrk:");
-    Serial2.print(auto_state.crosstrack);
-    Serial2.print("|nwp_lat:");
-    Serial2.print(next_WP_loc.lat);
-    Serial2.print("|nwp_lng:");
-    Serial2.print(next_WP_loc.lng);
+    // Serial2.print("|cur_lat:");
+    // Serial2.print(current_loc.lat);
+    // Serial2.print("|cur_lng:");
+    // Serial2.print(current_loc.lng);
+    // Serial2.print("|next_crosstrk:");
+    // Serial2.print(auto_state.next_wp_crosstrack);
+    // Serial2.print("|crosstrk:");
+    // Serial2.print(auto_state.crosstrack);
+    // Serial2.print("|nwp_lat:");
+    // Serial2.print(next_WP_loc.lat);
+    // Serial2.print("|nwp_lng:");
+    // Serial2.print(next_WP_loc.lng);
     // ==============================
-    // Serial2.print("1)PR: "); 
-    // Serial2.print(r_gain.roll_P);
-    // Serial2.print(" | 2)DR: ");
-    // Serial2.print(r_gain.roll_D);
-    // Serial2.print(" | 3)PP: ");
-    // Serial2.print(p_gain.pitch_P);
-    // Serial2.print(" | 4)PD: ");
-    // Serial2.print(p_gain.pitch_D);
+    Serial2.print("1)PR: "); 
+    Serial2.print(gains.rate_roll_P);
+    Serial2.print(" | 2)DR: ");
+    Serial2.print(gains.rate_roll_D);
+    Serial2.print(" | 3)PP: ");
+    Serial2.print(gains.rate_pitch_P);
+    Serial2.print(" | 4)PD: ");
+    Serial2.print(gains.rate_pitch_D);
+   
 
     // Serial2.print("YP: ");
     // Serial2.print(gain.rate_yaw_P);
@@ -177,8 +182,8 @@ void Telemetry::pid_gain_tuning() {
     // Serial2.print(gepees.hdop);
     // Serial2.print(" |sat:");
     // Serial2.print(gepees.satellites);
-    // Serial2.print(" |gspd:");
-    // Serial2.print(ahrs.groundspeed);
+    Serial2.print(" |gspd:");
+    Serial2.print(ahrs.groundspeed);
 
     // Serial2.print(" |aspd = ");
     // Serial2.print(arspd.v_ms);

@@ -163,7 +163,7 @@ void init_auto(){
             waypoint[0].alt = 69 * M_TO_CM;
         } else {
             // Set target ke WP saat ini
-            auto_state.next_wp_crosstrack = false;
+            // auto_state.next_wp_crosstrack = false;
             target_altitude.amsl_cm = waypoint[flag_wp].alt;
             set_next_WP(waypoint[flag_wp]);
             
@@ -248,7 +248,7 @@ void Transition_sequence_manual() {
 }
 
 // manual transistion flywing
-void Transition_sequence_manual_old() {
+void Transition_sequence_manual_o() {
     // vertical_velocity = get_climb_rate();
     // parameter changer for manual/auto
     ahrs.update_ahrs();
