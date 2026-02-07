@@ -37,7 +37,7 @@ float calc_nav_yaw_coordinated() {
 
 void stabilize_pitch(float speed_scaler) {
     plane_control_t.pitch_setpoint = -nav_pitch_deg;
-    plane_control_t.pitch_data = -imu.pitch;
+    plane_control_t.pitch_data = imu.pitch;
     plane_control_t.body_y_rate = imu.gyro_y;
     plane_control_t.speed_scaler = speed_scaler;
     plane_control_t.airspeed_min = MIN_AIRSPEED;
@@ -47,7 +47,7 @@ void stabilize_pitch(float speed_scaler) {
 
 void stabilize_roll(float speed_scaler) {
     plane_control_t.roll_setpoint = nav_roll_deg;
-    plane_control_t.roll_data = imu.roll; //dicek lagi kadang suka terbalik roll nya, kalau kebalik -imu.roll
+    plane_control_t.roll_data = -imu.roll; //dicek lagi kadang suka terbalik roll nya, kalau kebalik -imu.roll
     plane_control_t.body_x_rate = imu.gyro_x; 
     plane_control_t.speed_scaler = speed_scaler;
     plane_control_t.airspeed_min = MIN_AIRSPEED;

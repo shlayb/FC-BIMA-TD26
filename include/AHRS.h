@@ -221,7 +221,7 @@ void AHRS::driftCorrection() {
     bool is_gps_fix = gepees.age > 0 && gepees.age < 3000;
 
     if (is_gps_fix || gepees.gps_status >= GPS_FIX_3D || gepees.gps.speed.isUpdated()) {
-        groundspeed = gepees.speed_mps * 1000.0f;  // ini dicek lagi, kalau terbang jangan (* 1000)
+        groundspeed = gepees.speed_mps;  // ini dicek lagi, kalau terbang jangan (* 1000)
         velocity_vector = gepees.velocity;
         is_gps_lock = true;
     } else if (haveGPS()) {

@@ -147,12 +147,12 @@ void Telemetry::pid_gain_tuning() {
     Serial2.print(" |Arm: ");
     Serial2.print(arming);
     // ---------------------------------
-    // Serial2.print(" |R: ");
-    // Serial2.print(imu.roll);
-    // Serial2.print(" |P: ");
-    // Serial2.print(imu.pitch);
-    // Serial2.print(" |Y: ");
-    // Serial2.print(imu.yaw);
+    Serial2.print(" |R: ");
+    Serial2.print(imu.roll);
+    Serial2.print(" |P: ");
+    Serial2.print(imu.pitch);
+    Serial2.print(" |Y: ");
+    Serial2.print(imu.yaw);
     // ---------------------------------
     Serial2.print(" |head:");
     Serial2.print(imu.heading);
