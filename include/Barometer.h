@@ -178,6 +178,12 @@ bool Barometer::reached_approach_alt(float current_alt) {
     return false;
 }
 
+// Utility: return 0 if value is NaN/Inf, otherwise return value
+static inline float baro_safe_value(float v) {
+    if (isnan(v) || isinf(v)) return 0.0f;
+    return v;
+}
+
 bool Barometer::init_baro() {
     _I2C1.init();
     kalman.initializeKalman(5, 0.1, 1);
@@ -206,9 +212,10 @@ void Barometer::update_baro() {
 
     // lpfbaro.apply(altitude, 0.02f); 
     altitude = kalman.kalmanFilter(altitude);
+    altitude    = baro_safe_value(altitude);
     
     // Simple altitude limiter: if above 120m, randomize between 110-120m
-    // if (altitude > 120.0f) {
+    // if (altitude > -10.0f) {
     //     // Generate random value between 110 and 120
     //     float randomOffset = (float)(random(0, 1000)) / 100.0f; // 0.00 to 10.00
     //     altitude = 110.0f + randomOffset; // 110.0 to 120.0

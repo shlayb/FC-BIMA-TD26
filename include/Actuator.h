@@ -17,23 +17,23 @@
 // #define SERVO_RUD_L 5   // 5 9
 // #define SERVO_AIL_R 6   // 6 10
 // #define SERVO_RUD_R 9  // 9 9
-// #define MOTOR_1_PIN  3  
-// #define MOTOR_2_PIN  5
-// #define MOTOR_3_PIN  9
-// #define MOTOR_4_PIN  13
+// #define MOTOR_1_PIN  10  
+// #define MOTOR_2_PIN  11
+// #define MOTOR_3_PIN  12
+// #define MOTOR_4_PIN  14
 
-// PIN FC BARU
-#define SERVO_AIL_L 2  // mtr 1
-#define SERVO_ELE 4    //mtr 2
-#define THROTTLE 3   // mtr 3
-#define SERVO_RUD_L 10  // mtr 4
-#define SERVO_AIL_R 12  // mtr 5
-#define SERVO_RUD_R 14  // mtr 6
-// #define MOTOR_1_PIN 3  //FC pin 7
-// #define MOTOR_2_PIN 5  //FC pin 8
-// #define MOTOR_3_PIN 9  //FC pin 9
-// #define MOTOR_4_PIN 13 //FC pin 10
-// Pin belum dipake =>> mtr 11 = Pin 13
+//PIN FC BARU
+#define SERVO_AIL_L 2  
+#define SERVO_ELE 4    
+#define THROTTLE 10
+#define SERVO_RUD_L 6
+#define SERVO_AIL_R 12
+#define SERVO_RUD_R 14
+#define MOTOR_1_PIN 3  //FC pin 7
+#define MOTOR_2_PIN 5  //FC pin 8
+#define MOTOR_3_PIN 9  //FC pin 9
+#define MOTOR_4_PIN 13 //FC pin 10
+//Pin belum dipake =>> mtr 11 = Pin 13
 
 Servo motor1, motor2, motor3, motor4;
 Servo aileron_L; 
@@ -49,9 +49,6 @@ float u_roll, u_pitch, u_yaw, u_yaw_cmd;
 float m1_pwm, m2_pwm, m3_pwm, m4_pwm;
 float servo_L, servo_R;
 int servo_yaw;
-// Variabel untuk monitoring output servo cruise
-uint16_t servo_cruise_L = 1500;
-uint16_t servo_cruise_R = 1500;
 float high_out = 90;
 int basePWM = 1500;
 
@@ -123,10 +120,10 @@ void init_actuator() {
     pinMode(SERVO_AIL_R, OUTPUT);
     pinMode(SERVO_RUD_R, OUTPUT);
     pinMode(THROTTLE, OUTPUT);
-    // pinMode(MOTOR_1_PIN, OUTPUT);
-    // pinMode(MOTOR_2_PIN, OUTPUT);
-    // pinMode(MOTOR_3_PIN, OUTPUT);
-    // pinMode(MOTOR_4_PIN, OUTPUT);
+    pinMode(MOTOR_1_PIN, OUTPUT);
+    pinMode(MOTOR_2_PIN, OUTPUT);
+    pinMode(MOTOR_3_PIN, OUTPUT);
+    pinMode(MOTOR_4_PIN, OUTPUT);
 
     aileron_L.attach(SERVO_AIL_L);
     elevator.attach(SERVO_ELE);
@@ -136,10 +133,10 @@ void init_actuator() {
     
     pusher.attach(THROTTLE);
 
-    // motor1.attach(MOTOR_1_PIN);
-    // motor2.attach(MOTOR_2_PIN);
-    // motor3.attach(MOTOR_3_PIN);
-    // motor4.attach(MOTOR_4_PIN);
+    motor1.attach(MOTOR_1_PIN);
+    motor2.attach(MOTOR_2_PIN);
+    motor3.attach(MOTOR_3_PIN);
+    motor4.attach(MOTOR_4_PIN);
 
     motor1.writeMicroseconds(988);
     motor2.writeMicroseconds(988);
@@ -460,40 +457,6 @@ void motorCopterOff(int pwm1, int pwm2, int pwm3, int pwm4) {
     motor3.writeMicroseconds(pwm3);
     motor4.writeMicroseconds(pwm4);
     // pusher.writeMicroseconds(988);
-}
-
-void servos_out_manual_flywing_controlMotor() {
-    // Output elevon - roll benar, balik pitch saja
-    // Roll untuk differential (atas-bawah), Pitch untuk common mode (kanan-kiri) tapi terbalik
-    servo_cruise_L = abs(basePWM - ((ch_roll)-(ch_pitch)));
-    servo_cruise_R = abs(basePWM - ((ch_roll)+(ch_pitch)));
-    
-    aileron_L.writeMicroseconds(servo_cruise_L);
-    aileron_R.writeMicroseconds(servo_cruise_R);
-
-    float throttle_pwm = ch_throttle;
-    
-    // Gain lebih kecil untuk testing
-    float yaw_gain = 0.3f;    
-    float pitch_gain = 0.2f;  
-    float roll_gain = 0.2f;   
-    
-    float yaw_diff = (ch_yaw - 1500) * yaw_gain;
-    float pitch_diff = (ch_pitch - 1500) * pitch_gain;
-    float roll_diff = (ch_roll - 1500) * roll_gain;
-    
-    // Motor mixing matrix - Roll sudah benar, balik pitch saja
-    // Roll: + = kanan turun, kiri naik | Pitch: + = belakang turun, depan naik | Yaw: + = CW
-    m1_pwm = constrain(throttle_pwm - pitch_diff - roll_diff + yaw_diff, PWM_MIN, PWM_MAX); // kiri belakang (- pitch, - roll, + yaw)
-    m2_pwm = constrain(throttle_pwm + pitch_diff - roll_diff - yaw_diff, PWM_MIN, PWM_MAX); // kiri depan  (+ pitch, - roll, - yaw)
-    m3_pwm = constrain(throttle_pwm + pitch_diff + roll_diff + yaw_diff, PWM_MIN, PWM_MAX); // kanan depan (+ pitch, + roll, + yaw)
-    m4_pwm = constrain(throttle_pwm - pitch_diff + roll_diff - yaw_diff, PWM_MIN, PWM_MAX); // kanan belakang (- pitch, + roll, - yaw)
-
-    if (arming) {
-        motor_loop(m1_pwm, m2_pwm, m3_pwm, m4_pwm);
-    } else {
-        motor_loop(988, 988, 988, 988);
-    }
 }
 
 #endif

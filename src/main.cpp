@@ -13,8 +13,8 @@
 // #include <TimingUtils.h>
 #include "FreeRTOS.h"    
 #include "task.h"
-// #include "mode_setup.h"
-// #include "Mode_Manager.h"
+#include "mode_setup.h"
+#include "Mode_Manager.h"
  
 #define SERIAL_USB Serial
 #define SERIAL_UART Serial2
@@ -122,25 +122,24 @@ void voltage(void *pvParameters){
     }
 };
 
-// void controlThd(void *pvParameters){
-//     // daftar semua mode
-//     modes.registerMode(&mMANU);
-//     modes.registerMode(&mFBWA);
-//     modes.registerMode(&mAUTO);
-//     modes.registerMode(&mQHOV);
-//     modes.registerMode(&mCOPT);
-//     for(;;){
-//     setup_mode();
-//     vTaskDelay(pdMS_TO_TICKS(CONTROL_time)); // Reduced delay for more frequent updates
-//   }
-    
-// };
-
 void controlThd(void *pvParameters){
+    // daftar semua mode
+    // Fixedwing
+    modes.registerMode(&mMANU_FW);
+    modes.registerMode(&mFBWA_FW);
+    modes.registerMode(&mAUTO_FW);
+    // Flywing
+    modes.registerMode(&mMANU);
+    modes.registerMode(&mFBWA);
+    modes.registerMode(&mAUTO);
+    // Qopter
+    modes.registerMode(&mQHOV);
+    modes.registerMode(&mCOPT);
     for(;;){
-        Transition_sequence_manual();
-        vTaskDelay(pdMS_TO_TICKS(CONTROL_time)); // Reduced delay for more frequent updates
-    }
+    setup_mode();
+    vTaskDelay(pdMS_TO_TICKS(CONTROL_time)); // Reduced delay for more frequent updates
+  }
+    
 };
 
 void fwRoll(void *pvParameters){
@@ -206,7 +205,7 @@ void printUSB() {
     Serial.print(" |y:");
     Serial.print(imu.yaw);
     Serial.print(" |Mode: ");
-    Serial.print(mode_now);
+    Serial.print(modeCode4(current));
     // Serial.print(" |MHOV: ");
     // Serial.print(QUAD_PWM_THR);
     // Serial.print(" |MPUS: ");
@@ -217,16 +216,16 @@ void printUSB() {
     // Serial.print(cek_alpha_hover);
     // Serial.print(" |ch_thr:");
     // Serial.print(ch_throttle);
-    // Serial.print(" |hdop:");
-    // Serial.print(gepees.hdop);
-    // Serial.print(" |sat:");
-    // Serial.print(gepees.satellites);
-    // Serial.print(" |gspd:");
-    // Serial.print(ahrs.groundspeed);
-    // Serial.print(" |head:");
-    // Serial.print(imu.heading);
-    // Serial.print(" |alt = ");
-    // Serial.print(baro.altitude);
+    Serial.print(" |hdop:");
+    Serial.print(gepees.hdop);
+    Serial.print(" |sat:");
+    Serial.print(gepees.satellites);
+    Serial.print(" |gspd:");
+    Serial.print(ahrs.groundspeed);
+    Serial.print(" |head:");
+    Serial.print(imu.heading);
+    Serial.print(" |alt = ");
+    Serial.print(baro.altitude);
     Serial.print(" |ch_roll:");
     Serial.print(ch_roll);
     Serial.print(" |ch_pitch:");
@@ -235,28 +234,20 @@ void printUSB() {
     Serial.print(ch_throttle);
     Serial.print(" |ch_yaw:");
     Serial.print(ch_yaw);
-    // Serial.print(" |ail_L:");
-    // Serial.print(pwm_ail_L);
-    // Serial.print(" |ail_R:");
-    // Serial.print(pwm_ail_R);
-    // Serial.print(" |cruise_L:");
-    // Serial.print(servo_cruise_L);
-    // Serial.print(" |cruise_R:");
-    // Serial.print(servo_cruise_R);
-    // Serial.print(" MHOV: ");
-    // Serial.print(QUAD_PWM_THR);
-    // Serial.print (" mp:");
-    // Serial.print (motor_pwm);
-    // Serial.print(" MPUS: ");
-    // Serial.print(PUSHER_PWM);
-    // Serial.print (" m1: ");
-    // Serial.print (m1_pwm);
-    // Serial.print (" m2: ");
-    // Serial.print (m2_pwm);
-    // Serial.print (" m3: ");
-    // Serial.print (m3_pwm);
-    // Serial.print (" m4: ");
-    // Serial.print (m4_pwm);
+    Serial.print(" MHOV: ");
+    Serial.print(QUAD_PWM_THR);
+    Serial.print (" mp:");
+    Serial.print (motor_pwm);
+    Serial.print(" MPUS: ");
+    Serial.print(PUSHER_PWM);
+    Serial.print (" m1: ");
+    Serial.print (m1_pwm);
+    Serial.print (" m2: ");
+    Serial.print (m2_pwm);
+    Serial.print (" m3: ");
+    Serial.print (m3_pwm);
+    Serial.print (" m4: ");
+    Serial.print (m4_pwm);
     // Serial.print(" |GPD = ");
     // Serial.print(get_pitch_demand());
     // Serial.print(" |GTD = ");
@@ -319,8 +310,8 @@ void printUSB() {
     // Serial.println(millis());
     // Serial.print(" press_psi = ");
     // Serial.print(arspd.press_psi);
-    // Serial.print(" v_ms = ");
-    // Serial.print(arspd.v_ms);
+    Serial.print(" v_ms = ");
+    Serial.print(arspd.v_ms);
     // Serial.print(" prspsi = ");
     // Serial.print(arspd.prspsi);
     // Serial.print(" gz = ");
@@ -445,7 +436,7 @@ void wp_setup() {
     //  add_waypoint(-77663700, 1102351400, 90 * M_TO_CM, 5);  // wp5
     //  add_waypoint(-77669100, 1102339700, 90 * M_TO_CM, 6);  // wp6
 
-    //WP SIMULASI SUMBER ARUM
+    //WP SIMULASI 1 SUMBER ARUM
     add_waypoint(0, 0, 69 * M_TO_CM, 0);
     add_waypoint(-77671400, 1102340100, 90 * M_TO_CM, 1);  // wp1 
     add_waypoint(-77679300, 1102340400, 100 * M_TO_CM, 2);  // wp2 
@@ -457,7 +448,12 @@ void wp_setup() {
     add_waypoint(-77660000, 1102341800, 90 * M_TO_CM, 8);  // wp8
     add_waypoint(-77672500, 1102336300, 90 * M_TO_CM, 9);  // wp9
     
-    // // tes wp D13
+    // tes wp D13
+    // add_waypoint(0, 0, 69 * M_TO_CM, 0);
+    // add_waypoint(-77738260, 1103784420, 2 * M_TO_CM, 1);
+    // add_waypoint(-77732600, 1103786320, 2 * M_TO_CM, 2);
+    // add_waypoint(-77746550, 1103782450, 2 * M_TO_CM, 3);
+
     // test waypoint D13 yang mirip di hanggar Sumberarum
     //  add_waypoint(-77666500, 1102331000, 90 * M_TO_CM, 1);
     //  add_waypoint(-77671400, 1102334100, 90 * M_TO_CM, 2);
@@ -466,7 +462,7 @@ void wp_setup() {
 
 void setup() {
     milisawal = getMillis();
-    // modes.setMode(ModeId::COPT);
+    modes.setMode(ModeId::COPT);
     // active_mode = ModeId::COPT;
     // current    = ModeId::COPT;
     wp_setup();
@@ -492,7 +488,7 @@ void setup() {
     }
     loop_timer = micros();
 
-    // xTaskCreate(Print_To_Raspi, "PrintRaspi", 4096, NULL, 3, &Task_Raspi);
+    xTaskCreate(Print_To_Raspi, "PrintRaspi", 4096, NULL, 3, &Task_Raspi);
     xTaskCreate(Print_telem, "Telem", 2048, NULL, 2, &Task_Telem);
     // xTaskCreate(Print_task, "Print", 4096, NULL, 3, &Task_Print);
     xTaskCreate(radio, "Radio", 4096, NULL, 3, &Task_Print);

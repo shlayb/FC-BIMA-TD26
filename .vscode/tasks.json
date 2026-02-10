@@ -1,0 +1,15 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "PlatformIO Build",
+			"type": "shell",
+			"command": "C:\\Users\\mf\\.platformio\\penv\\Scripts\\platformio.exe run"
+		},
+		{
+			"label": "PlatformIO Build2",
+			"type": "shell",
+			"command": "C:\\Users\\mf\\.platformio\\penv\\Scripts\\platformio.exe run"
+		}
+	]
+}

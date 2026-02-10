@@ -7,7 +7,7 @@
 #include <definitions.h>
 #include <gps.h>
 // #include "drivers/hmc5883l.h"
-#include "AutoMode.h"
+#include "Auto_setup.h"
 #include <bno055.h>
 #include <../lib/Math/vector2.h>
 // #include <TECS.h>

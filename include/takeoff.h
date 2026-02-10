@@ -1,6 +1,6 @@
 #pragma once
 #include <Actuator.h>
-#include <AutoMode.h>
+#include <Auto_setup.h>
 #include <bno055.h>
 
 // #define TAKEOFF_WITH_LAUCHER

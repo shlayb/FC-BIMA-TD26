@@ -14,8 +14,8 @@
 
 struct pitch_gains{
     float pitch_max_rate    = 60.0f;
-    float pitch_P           = 1.57f; //0.717 0.818 0.80 1.90
-    float pitch_D           = 0.2f;
+    float pitch_P           = 1.0f; //0.717 0.818 0.80 1.90
+    float pitch_D           = 0.0f;
     float pitch_tau         = 0.45f;
     float pitch_I           = 0.0f;
     float pitch_imax        = 30.0f;

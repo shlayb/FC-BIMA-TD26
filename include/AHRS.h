@@ -35,6 +35,9 @@
 #include "bno055.h"
 #include "gps.h"
 
+
+
+
 Gepees gepees(0, 1, 38400);
 Airspeed arspd;
 IMU imu;
@@ -119,7 +122,7 @@ AHRS::AHRS()
       windspeed(),
       windspeed_x(0.0f),
       last_airspeed(0.0f) {}
-      
+
 bool AHRS::haveGPS() const {
     return gepees.gps_status > GPS_NO_FIX;
 }

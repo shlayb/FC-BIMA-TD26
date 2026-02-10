@@ -7,11 +7,10 @@
 #include "Control_data.h"
 // #include "Servos_FW.h"
 #include "FW_config.h"
-// #include "LQR_PF.h" // file untuk auto
-#include "AutoMode.h" // untuk auto juga
 #include <AP_Math.h>
 #include "TECS.h" // untuk auto juga
 #include "L1_Controller.h"
+#include "Auto_setup.h" // untuk auto juga
 
 // int value = 0;
 float nav_roll_deg;
@@ -81,8 +80,7 @@ void updateFBWA_FW()
 /** calculate roll from navigation controller */
 void calc_nav_roll()
 {
-    float commanded_roll = -((nav_roll_cd())/100); //kalau arm kedalam navroll nya mines
-    // float commanded_roll = (nav_roll_cd())/100; // AKTIFKAN JIKA HEADING KEBALIK
+    float commanded_roll = (nav_roll_cd())/100; //kalau arm kedalam navroll nya mines
     // cmdroll = commanded_roll;
     nav_roll_deg = constrain(commanded_roll, -36, 36);
     // update_load_factor();

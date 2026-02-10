@@ -1,10 +1,15 @@
 #pragma once
 
 #include "FW_controller.h"
-#include "AutoMode.h"
-// #include "LQR_PF.h"
+#include "Auto_setup.h"
 #include "TECS.h"
 #include "L1_Controller.h"
+#include "Actuator.h"
+#include "mode_setup.h"
+#include "Navigation.h"
+#include "FW_ControlModes.h"
+#include "Fuzzy_FW_Roll.h"
+// #include "Radio.h"
 
 bool enable_throttle_nudge = true;
 int16_t throttle_nudge;
@@ -22,7 +27,7 @@ void calc_groundspeed_undershoot() {
 
 void nav_gps() {
     uint32_t now = millis();
-    if (!arming && now - last_home_set_ms >= 5000) {
+    if (!arming && now - last_home_set_ms >= 5000 && baro.altitude <= 10) {
         last_home_set_ms = now;
         ahrs.setHome(home_wp_loc);
     }
@@ -111,3 +116,83 @@ void update_alt()
                                                   aerodynamic_load_factor);
     }
 }
+
+int autonav_state = 0;  /// variable to check auto-loop state, delete after testing
+bool enterauto = false;
+
+void update_speed_height() {
+    if (auto_throttle_mode) {
+        update_50hz();
+    }
+}
+
+void updateAuto_FW() {
+    calc_nav_roll();
+    calc_nav_pitch();
+    // calc_throttle();
+}
+
+int display_wp() {
+    if (flag_wp == -1) {
+        return -1;
+    }
+    return flag_wp - 1;
+}
+
+void add_waypoint(int32_t lat, int32_t lng, int32_t alt, int index) {
+    waypoint[index].lat = lat;
+    waypoint[index].lng = lng;
+    waypoint[index].alt = alt;
+    wp_sum++;
+}
+
+void navigate() {
+    if (auto_navigation_mode) {
+        if (flag_wp < 0) {
+            flag_wp++;
+            auto_state.next_wp_crosstrack = false;
+            target_altitude.amsl_cm = waypoint[flag_wp].alt;
+            set_next_WP(waypoint[flag_wp]);
+        }
+    }
+
+    else if (auto_takeoff_mode) {
+        if (flag_takeoff < 0) {
+            flag_takeoff++;
+            auto_state.next_wp_crosstrack = false;
+            set_next_WP(_takeoff[flag_takeoff]);
+        }
+    }
+    // get distance to next waypoint
+    auto_state.distance_next_wp = current_loc.get_distance(next_WP_loc);
+    auto_state.bearing = current_loc.get_bearing_to(next_WP_loc) / 100.0f;
+    auto_state.wp_proportion = current_loc.line_path_proportion(prev_WP_loc, next_WP_loc);
+    set_path_proportion(auto_state.wp_proportion);
+
+    if (auto_navigation_mode) {
+        const float wp_radius = WP_RADIUS_DEFAULT;
+        acceptance_distance_m = turn_distance(wp_radius, auto_state.next_turn_angle);  //  > 20 ? turn_distance(wp_radius, auto_state.next_turn_angle) : 21;
+    }
+
+    if (auto_takeoff_mode) {
+        const float wp_radius = 13.0f;
+        acceptance_distance_m = turn_distance(wp_radius, auto_state.next_turn_angle);
+    }
+
+    if (auto_state.distance_next_wp <= acceptance_distance_m || current_loc.past_interval_finish_line(prev_WP_loc, next_WP_loc)) {
+        if (auto_navigation_mode) {
+            flag_wp++;
+            if (flag_wp >= wp_sum) {
+                flag_wp = -1;
+                auto_navigation_mode = false;
+                mode_fbwa = true;
+            } else {
+                auto_state.next_wp_crosstrack = true;
+                target_altitude.amsl_cm = waypoint[flag_wp].alt;
+                set_next_WP(waypoint[flag_wp]);
+            }
+        }
+    }
+    update_wp_nav();
+}
+

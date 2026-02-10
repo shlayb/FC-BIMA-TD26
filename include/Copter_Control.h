@@ -12,24 +12,18 @@
 
 // ===================== FRAME MIX (punyamu) =====================
 // F450 frame konfigurasi x
-const double A_invers[4][4] = {
-  {292600,  1300300,  1300300,  6283300},
-  {292600,  1300300, -1300300, -6283300},
-  {292600, -1300300, -1300300,  6283300},
-  {292600, -1300300,  1300300, -6283300}
-};
+// const double A_invers[4][4] = {
+//   {292600,  1300300,  1300300,  6283300},
+//   {292600,  1300300, -1300300, -6283300},
+//   {292600, -1300300, -1300300,  6283300},
+//   {292600, -1300300,  1300300, -6283300}
+// };
 
 //WAHANA TD 2025
-// const double A_invers[4][4] = {{1131000, 2381000, 2381000, 1166822},
-//                                {1131000, 2381000, -2381000, -1166822},
-//                                {1131000, -2381000, -2381000, 1166822},
-//                                {1131000, -2381000, 2381000, -1166822}};  
-
-//WAHANA TAILSITTER-BIMA - Roll direction fixed
-// const double A_invers[4][4] = {{7763000, 2381000, 2381000, 3869960},   // m1: roll terbalik
-//                                {7763000, 2381000, -2381000, -3869960},  // m2: roll terbalik  
-//                                {7763000, -2381000, -2381000, 3869960},    // m3: roll terbalik
-//                                {7763000, -2381000, 2381000, -3869960}};   // m4: roll terbalik  
+const double A_invers[4][4] = {{1131000, 2381000, 2381000, 1166822},
+                               {1131000, 2381000, -2381000, -1166822},
+                               {1131000, -2381000, -2381000, 1166822},
+                               {1131000, -2381000, 2381000, -1166822}};  
 
 // const double A_invers[4][4] = {
 //   {1,  20,  1,  1},
@@ -55,8 +49,8 @@ float delta_calc_time;
 float alt_ref, heading_now, last_alt, last_heading, alt_now;
 float alt_target, z_velocity;
 float roll_cmd, pitch_cmd, yaw_cmd;
-float min_roll  = -35.0f; //-15.0f;
-float max_roll  =  35.0f; //15.0f;
+float min_roll  = -15.0f;
+float max_roll  =  15.0f;
 float min_pitch = -35.0f;
 float max_pitch =  35.0f;
 float min_yaw   = -35.0f;
@@ -83,33 +77,32 @@ float tesgz,tesgx;
 
 // ===================== GAINS =====================
 struct gains {
-    float k_alt        = 5.0f;
+    float k_alt        = 6.50f;
     float k_z_velocity = 3.0f;
     float k_z_vel      = 1.0f;
     float k_pos        = 1.0f;
     int16_t roll_rmt, pitch_rmt, yaw_rmt;
 
     // Stabilize (angle -> rate), P-only (
-    float stab_roll_P  = 3.99f;
-    float stab_pitch_P = 3.99f;
-    float stab_yaw_P   = 3.99f;
+    float stab_roll_P  = 4.5f;
+    float stab_pitch_P = 4.0f;
+    float stab_yaw_P   = 5.0f;
 
     // Rate PID + Imax
-    float rate_roll_P    = 0.00f; //2.50f;
-    float rate_roll_I    = 0.00f; //0.01f;
-    float rate_roll_D    = 0.00f; //0.13f;
+    float rate_roll_P    = 5.00f;
+    float rate_roll_I    = 0.01f;
+    float rate_roll_D    = 0.05f;
     float rate_roll_IMAX = 500.0f;
 
-    //fix
-    float rate_pitch_P    = 0.00f; //2.50f;
-    float rate_pitch_I    = 0.00f; //0.01f;
-    float rate_pitch_D    = 0.00f; //0.13f;
+    float rate_pitch_P    = 5.0f;
+    float rate_pitch_I    = 0.01f;
+    float rate_pitch_D    = 0.05f;
     float rate_pitch_IMAX = 500.0f;
 
-    float rate_yaw_P      = 0.00f; //20.0f;
-    float rate_yaw_I      = 0.00f; //0.01f;
-    float rate_yaw_D      = 0.00f; //1.1581f; //0.05f;
-    float rate_yaw_IMAX   = 8.00f;
+    float rate_yaw_P      = 30.00f; //20.0f;
+    float rate_yaw_I      = 0.01f; //0.01f;
+    float rate_yaw_D      = 0.05f; //0.05f;
+    float rate_yaw_IMAX   = 8.0f;
 
     // batas rate target (deg/s)
     float max_rate_r = 220.0f;
@@ -179,7 +172,7 @@ void copter_ControlFSFB(int16_t ch_r, int16_t ch_p, int16_t ch_y, int16_t ch_thr
 
     // ===== altitude (aktifkan pembacaan agar alt_now valid) =====
     if (alt_hold) {
-        if (ch_thr > 1500 && ch_thr < 1700) {
+        if (ch_thr > 1600 && ch_thr < 1800) {
             if (!alt_hold_on) { alt_ref = baro.altitude; alt_hold_on = true; }
             alt_now    = baro.altitude;
             alt_target = alt_now - alt_ref;
@@ -262,9 +255,9 @@ void copter_ControlFSFB(int16_t ch_r, int16_t ch_p, int16_t ch_y, int16_t ch_thr
 
 
     // ===== Rate PID (P + I + D_on_meas) =====
-    const float er = (roll_rate_sp  - gz);   // NOTE: pakai gy untuk roll
+    const float er = (roll_rate_sp  - gy);   // NOTE: pakai gy untuk roll
     const float ep = (pitch_rate_sp - gx);   // gx untuk pitch
-    const float ey = (yaw_rate_sp   - gy);   // gz untuk yaw
+    const float ey = (yaw_rate_sp   - gz);   // gz untuk yaw
 
     const float dgy = (dt>0) ? (gy - gy_prev)/dt : 0.0f; gy_prev = gy;
     const float dgx = (dt>0) ? (gx - gx_prev)/dt : 0.0f; gx_prev = gx;
@@ -284,12 +277,12 @@ void copter_ControlFSFB(int16_t ch_r, int16_t ch_p, int16_t ch_y, int16_t ch_thr
     }
 
     // keluaran inner-loop (skala tetap seperti punyamu)
-    u2 = ( gain.rate_roll_P  * er + i_rate_roll  - gain.rate_roll_D  * dgz ) / 10'000'000.0f; // roll via gy
+    u2 = ( gain.rate_roll_P  * er + i_rate_roll  - gain.rate_roll_D  * dgy ) / 10'000'000.0f; // roll via gy
     u3 = ( gain.rate_pitch_P * ep + i_rate_pitch - gain.rate_pitch_D * dgx ) / 10'000'000.0f; // pitch via gx
-    u4 = ( gain.rate_yaw_P   * ey + i_rate_yaw   - gain.rate_yaw_D   * dgy )/ 10'000'000.0f; // yaw
+    u4 = ( gain.rate_yaw_P   * ey + i_rate_yaw   - gain.rate_yaw_D   * dgz )/ 10'000'000.0f; // yaw
 
     // ===== Throttle/altitude (punyamu) =====
-    u1 = 0;//(-gain.k_alt * (alt_target/1.000f) + (-gain.k_z_velocity*(z_velocity)/100.0f)) / 10'000'000.0f;
+    u1 = (-gain.k_alt * (alt_target/1.000f) + (-gain.k_z_velocity*(z_velocity)/100.0f)) / 10'000'000.0f; //0.0f;
 
     // ===== MIXER =====
     omega2[0] = (A_invers[0][0] * u1 + A_invers[0][1] * u2 + A_invers[0][2] * u3 + A_invers[0][3] * u4);

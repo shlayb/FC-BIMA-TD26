@@ -72,6 +72,17 @@
     "string": "cpp",
     "vector": "cpp",
     "exception": "cpp",
-    "limits": "cpp"
-  }
+    "limits": "cpp",
+    "*.tpp": "cpp",
+    "ratio": "cpp",
+    "stop_token": "cpp",
+    "streambuf": "cpp",
+    "deque": "cpp",
+    "list": "cpp",
+    "unordered_map": "cpp",
+    "initializer_list": "cpp",
+    "mutex": "cpp"
+  },
+  "cmake.sourceDirectory": "C:/Users/rifah/OneDrive/Documents/Gamaforce/fcuy25-1/lib/SparkFun_u-blox_GNSS_Arduino_Library-main",
+  "cmake.ignoreCMakeListsMissing": true
 }

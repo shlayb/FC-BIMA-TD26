@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Attitude.h"
-#include "AutoMode.h"
+#include "Auto_setup.h"
 #include "AHRS.h"
 #include "Navigation.h"
 #include <AP_Math.h>
