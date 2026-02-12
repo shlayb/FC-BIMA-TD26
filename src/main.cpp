@@ -10,11 +10,13 @@
 #include <Transition.h>
 #include <takeoff.h>
 #include <RaspberryPi_Telemtry.h>
+#include <Mavlink.h>
 // #include <TimingUtils.h>
 #include "FreeRTOS.h"    
 #include "task.h"
 #include "mode_setup.h"
 #include "Mode_Manager.h"
+
  
 #define SERIAL_USB Serial
 #define SERIAL_UART Serial2
@@ -32,6 +34,7 @@
 #define FWRoll_time 20
 #define RADIO_time 10
 #define TELEM_time 10
+#define MAVLINK_time 10
 #define RASPI_time 100
 #define BUZZER_time 100
 #define VOLTAGE_time 100
@@ -43,6 +46,7 @@ uint32_t time_last;
 
 Telemetry telem;
 GPSTelemetry rasprint;
+MavlinkHandler mavHandler;
 
 TaskHandle_t Task_IMU;
 TaskHandle_t Task_BARO;
@@ -50,6 +54,7 @@ TaskHandle_t Task_GPS;
 TaskHandle_t Task_Print;
 TaskHandle_t Task_Raspi;
 TaskHandle_t Task_Telem;
+TaskHandle_t Task_Mavlink;
 TaskHandle_t Task_Buzzer;
 TaskHandle_t Task_Control;
 TaskHandle_t Task_Voltage;
@@ -100,6 +105,19 @@ void Print_telem(void *pvParameters){
         telem.pid_gain_tuning();
         // telem.send_vehicle_attitude_data();
         vTaskDelay(pdMS_TO_TICKS(TELEM_time)); // Reduced delay for more frequent updates
+    }
+};
+
+void mavlink_print(void *pvParameters){
+    for(;;){
+        // Send Heartbeat every 1000ms (1 second)
+        // mavSend(&mavHeartbeatMsg);
+        // handlePortUSB();
+        // handlePortTLM();
+        // handlePortRPI();
+        mavHandler.handlePorts();
+        mavHandler.mavlinkTask();
+        vTaskDelay(pdMS_TO_TICKS(MAVLINK_time)); // Reduced delay for more frequent updates
     }
 };
 
@@ -505,7 +523,8 @@ void setup() {
 
     // xTaskCreate(Print_To_Raspi, "PrintRaspi", 4096, NULL, 3, &Task_Raspi);
     // xTaskCreate(Print_telem, "Telem", 2048, NULL, 2, &Task_Telem);
-    xTaskCreate(Print_task, "Print", 4096, NULL, 3, &Task_Print);
+    xTaskCreate(mavlink_print, "Mavlink", 2048, NULL, 2, &Task_Mavlink);
+    // xTaskCreate(Print_task, "Print", 4096, NULL, 3, &Task_Print);
     xTaskCreate(radio, "Radio", 4096, NULL, 3, &Task_Print);
     xTaskCreate(airspeed, "Airspeed", 4096, NULL, 2, &Task_Print);
     xTaskCreate(controlThd, "Control", 4096, NULL, 2, &Task_Control);
