@@ -51,6 +51,7 @@ private:
     bool mission_upload_in_progress = false;
     unsigned long mission_timeout = 0;
     const unsigned long MISSION_TIMEOUT_MS = 5000;  // 5 second timeout
+    uint8_t mission_upload_sysid = 0;  // Store requester sysid
 
     // Mission download state
     uint16_t mission_download_seq = 0;
@@ -165,13 +166,23 @@ void MavlinkHandler::sendMissionRequest(uint16_t sequence) {
         SYSTEM_ID,
         COMPONENT_ID,
         &msg,
-        0,              // target_system (0 = broadcast)
-        0,              // target_component
+        mission_upload_sysid,  // Send to the GCS that initiated upload
+        MAV_COMP_ID_MISSIONPLANNER,  // target_component
         sequence,       // seq
         MAV_MISSION_TYPE_MISSION  // mission_type
     );
-    mavSendAll(msg);
-    Serial.printf("Requesting WP#%d\n", sequence);
+    
+    // Explicit send dengan flush ke semua port
+    uint8_t buf[MAVLINK_MAX_PACKET_LEN];
+    uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
+    Serial2.write(buf, len);
+    Serial2.flush();
+    Serial.write(buf, len);
+    Serial.flush();
+    Serial7.write(buf, len);
+    Serial7.flush();
+    
+    Serial.printf(">>> Requesting WP#%d from GCS (sys=%d) (len=%d bytes)\n", sequence, mission_upload_sysid, len);
 }
 
 // Send MISSION_ACK when mission upload complete
@@ -181,32 +192,50 @@ void MavlinkHandler::sendMissionAck(uint8_t type) {
         SYSTEM_ID,
         COMPONENT_ID,
         &msg,
-        0,              // target_system (0 = broadcast)
-        0,              // target_component
+        mission_upload_sysid,  // Send to requester
+        MAV_COMP_ID_MISSIONPLANNER,
         type,           // type: 0=success, 1=error, etc
         MAV_MISSION_TYPE_MISSION  // mission_type
     );
-    mavSendAll(msg);
-    Serial.printf("Mission ACK sent (type=%d)\n", type);
+    
+    // Explicit send dengan flush priority ke telemetri
+    uint8_t buf[MAVLINK_MAX_PACKET_LEN];
+    uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
+    Serial2.write(buf, len);
+    Serial2.flush();
+    Serial.write(buf, len);
+    Serial.flush();
+    Serial7.write(buf, len);
+    Serial7.flush();
+    
+    Serial.printf(">>> Mission ACK sent to GCS (sys=%d): type=%d (len=%d bytes)\n", mission_upload_sysid, type, len);
 }
 
-// Handle MISSION_COUNT message from GCS
+// Handle MISSION_COUNT message from GCS (upload initiation)
 void MavlinkHandler::handleMissionCount(const mavlink_message_t& msg) {
     mavlink_mission_count_t count_msg;
     mavlink_msg_mission_count_decode(&msg, &count_msg);
+
+    Serial.printf("\n>>> MISSION_COUNT received (UPLOAD initiated)\n");
+    Serial.printf("    Sender: sys=%d, comp=%d\n", msg.sysid, msg.compid);
+    Serial.printf("    Count: %d waypoints\n", count_msg.count);
+    Serial.printf("    Target: sys=%d, comp=%d\n", count_msg.target_system, count_msg.target_component);
 
     mission_count = count_msg.count;
     mission_items_received = 0;
     mission_upload_in_progress = true;
     mission_timeout = getMillis();
+    mission_upload_sysid = msg.sysid;  // Store for responses
 
-    Serial.printf("Mission upload started: expecting %d waypoints\n", mission_count);
+    Serial.printf("    Upload started: expecting %d waypoints\n", mission_count);
     
     // Request first waypoint (index 0)
     if (mission_count > 0) {
+        Serial.printf("    Requesting WP#0...\n");
         sendMissionRequest(0);
     } else {
         // No waypoints to upload
+        Serial.printf("    No waypoints to upload, sending ACK\n");
         sendMissionAck(0);  // MAV_MISSION_ACCEPTED
         mission_upload_in_progress = false;
     }
@@ -251,7 +280,7 @@ void MavlinkHandler::handleMissionItem(const mavlink_message_t& msg) {
         waypoint[wp_index].alt = (int32_t)(mission_item.z * 100);  // alt in cm
 
         mission_items_received++;
-        Serial.printf("WP#%d received: lat=%.7f, lng=%.7f, alt=%.2f m\n",
+        Serial.printf(">>> MISSION_ITEM#%d received: lat=%.7f, lng=%.7f, alt=%.2f m\n",
                       wp_index,
                       mission_item.x / 1e7,
                       mission_item.y / 1e7,
@@ -259,11 +288,13 @@ void MavlinkHandler::handleMissionItem(const mavlink_message_t& msg) {
 
         // Request next waypoint or complete upload
         if (mission_items_received < mission_count) {
+            Serial.printf("    Requesting WP#%d...\n", mission_items_received);
             sendMissionRequest(mission_items_received);
         } else {
             // All waypoints received
             wp_sum = mission_count;  // Update total waypoint count
-            Serial.printf("Mission upload complete! Total waypoints: %d\n", wp_sum);
+            Serial.printf("    Mission upload complete! Total waypoints: %d\n", wp_sum);
+            Serial.printf("    Sending MISSION_ACK...\n");
             sendMissionAck(0);  // MAV_MISSION_ACCEPTED
             mission_upload_in_progress = false;
         }
@@ -276,18 +307,32 @@ void MavlinkHandler::handleMissionItem(const mavlink_message_t& msg) {
 
 // Send MISSION_COUNT to GCS (when GCS requests mission list)
 void MavlinkHandler::sendMissionCount(uint8_t target_system) {
+    Serial.printf("DEBUG: sendMissionCount called with wp_sum=%d, target_system=%d\n", wp_sum, target_system);
+    
     mavlink_message_t msg;
     mavlink_msg_mission_count_pack(
         SYSTEM_ID,
         COMPONENT_ID,
         &msg,
-        target_system,
-        0,              // target_component
+        target_system,  // 0 untuk broadcast, atau sysid dari requester
+        MAV_COMP_ID_MISSIONPLANNER,  // target_component
         wp_sum,         // count: jumlah waypoint yang ada
         MAV_MISSION_TYPE_MISSION
     );
-    mavSendAll(msg);
-    Serial.printf("Mission count sent: %d waypoints\n", wp_sum);
+    
+    // Send ke semua port dan explicit flush
+    uint8_t buf[MAVLINK_MAX_PACKET_LEN];
+    uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
+    
+    // Prioritas: kirim ke semua untuk reliable
+    Serial.write(buf, len);
+    Serial.flush();
+    Serial2.write(buf, len);  // Telemetri - primary
+    Serial2.flush();
+    Serial7.write(buf, len);
+    Serial7.flush();
+    
+    Serial.printf("Mission count sent: %d waypoints (len=%d bytes)\n", wp_sum, len);
 }
 
 // Send individual MISSION_ITEM to GCS
@@ -305,7 +350,7 @@ void MavlinkHandler::sendMissionItem(uint16_t sequence) {
         COMPONENT_ID,
         &msg,
         0,              // target_system (broadcast)
-        0,              // target_component
+        MAV_COMP_ID_MISSIONPLANNER,  // target_component
         sequence,       // seq
         MAV_FRAME_GLOBAL_RELATIVE_ALT,  // frame
         MAV_CMD_NAV_WAYPOINT,           // command
@@ -317,12 +362,19 @@ void MavlinkHandler::sendMissionItem(uint16_t sequence) {
         waypoint[sequence].alt / 100.0f, // z = altitude (float, in meters)
         MAV_MISSION_TYPE_MISSION
     );
-    mavSendAll(msg);
-    Serial.printf("Sent WP#%d: lat=%.7f, lng=%.7f, alt=%.2f m\n",
+    
+    // Explicit send dengan flush
+    uint8_t buf[MAVLINK_MAX_PACKET_LEN];
+    uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
+    Serial2.write(buf, len);
+    Serial2.flush();
+    
+    Serial.printf("Sent WP#%d: lat=%.7f, lng=%.7f, alt=%.2f m (len=%d)\n",
                   sequence,
                   waypoint[sequence].lat / 1e7,
                   waypoint[sequence].lng / 1e7,
-                  waypoint[sequence].alt / 100.0f);
+                  waypoint[sequence].alt / 100.0f,
+                  len);
 }
 
 // Handle MISSION_REQUEST_LIST from GCS (user click "Read Waypoints")
@@ -330,15 +382,26 @@ void MavlinkHandler::handleMissionRequestList(const mavlink_message_t& msg) {
     mavlink_mission_request_list_t req_list;
     mavlink_msg_mission_request_list_decode(&msg, &req_list);
 
-    Serial.printf("Mission request list received from sys %d, comp %d\n", 
-        req_list.target_system, req_list.target_component);
+    Serial.printf("\n>>> MISSION_REQUEST_LIST received\n");
+    Serial.printf("    Requester: sys=%d, comp=%d\n", msg.sysid, msg.compid);
+    Serial.printf("    Target: sys=%d, comp=%d\n", req_list.target_system, req_list.target_component);
+    Serial.printf("    Current wp_sum=%d\n", wp_sum);
+
+    // Validate wp_sum
+    if (wp_sum == 0) {
+        Serial.println("WARNING: wp_sum is 0! No waypoints to send.");
+        // Still send count=0 so MP knows there are no waypoints
+    }
 
     // Start mission download
     mission_download_in_progress = true;
     mission_download_seq = 0;
 
     // Send total mission count
-    sendMissionCount(msg.sysid);  // Send count to the requester
+    // Target ke requester (GCS biasanya sys=0 atau 254)
+    uint8_t target_sys = (msg.sysid == 0) ? 255 : msg.sysid;  // Broadcast or specific
+    Serial.printf("    Sending MISSION_COUNT with target=%d\n", target_sys);
+    sendMissionCount(target_sys);
 }
 
 // Handle MISSION_REQUEST from GCS (request individual waypoint during download)
@@ -361,20 +424,22 @@ void MavlinkHandler::handleMissionRequest(const mavlink_message_t& msg) {
     }
 
     mission_download_seq = req.seq;
+    Serial.printf(">>> MISSION_REQUEST seq=%d received\n", req.seq);
 
     // Send the requested waypoint
     if (req.seq < wp_sum) {
+        Serial.printf("    Sending WP#%d\n", req.seq);
         sendMissionItem(req.seq);
     } else {
         // Download complete or invalid index
         if (req.seq == wp_sum) {
             // GCS is requesting the mission end marker
-            Serial.printf("Mission download complete\n");
+            Serial.printf("    Mission download complete (seq=%d == wp_sum=%d)\n", req.seq, wp_sum);
             mission_download_in_progress = false;
             // Send mission ack to indicate completion
             sendMissionAck(0);  // MAV_MISSION_ACCEPTED
         } else {
-            Serial.printf("ERROR: Invalid mission sequence %d\n", req.seq);
+            Serial.printf("ERROR: Invalid mission sequence %d (wp_sum=%d)\n", req.seq, wp_sum);
         }
     }
 }
