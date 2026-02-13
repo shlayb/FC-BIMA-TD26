@@ -1,496 +1,3 @@
-// #ifndef MAV_H
-// #define MAV_H
-
-// #include "TimingUtils.h"
-// #include "bno055.h"
-// #include "AHRS.h"
-// #include "Radio.h"
-// #include "gps.h"
-// #include <common/mavlink.h>
-// // --- CONFIG ---
-// // #define SDA_PIN 21
-// // #define SCL_PIN 22
-// // #define MAV_RPI  Serial7    // UART ke Raspberry Pi
-// // #define MAV_GCS  Serial     // USB untuk GCS
-// // #define PARAM_REQUEST_INTERVAL 1000  // 1 second
-
-// // // --- GPS DATA STRUCTURE ---
-// // struct {
-// //     int32_t lat;        // latitude in degrees * 1e7
-// //     int32_t lon;        // longitude in degrees * 1e7
-// //     int32_t alt;        // altitude in mm
-// //     uint16_t eph;       // horizontal dilution of precision (cm)
-// //     uint16_t epv;       // vertical dilution of precision (cm)
-// //     uint16_t vel;       // ground speed (cm/s)
-// //     uint16_t cog;       // course over ground (degrees * 100)
-// //     uint8_t fix_type;   // 0=No Fix, 1=GPS, 2=DGPS, 3=RTK Fixed, 4=RTK Float
-// //     uint8_t satellites_visible;
-// // } gps = {0, 0, 0, 0, 0, 0, 0, 0, 0};
-
-// const uint8_t SYSTEM_ID = 1;
-// const uint8_t COMPONENT_ID =  MAV_COMP_ID_AUTOPILOT1;
-// enum PortId { PORT_USB=0, PORT_TLM=1, PORT_RPI=2 };
-// static mavlink_status_t st_usb, st_tlm, st_rpi;
-// static mavlink_message_t rxmsg;
-
-
-// // ALERT THRESHOLDS AND INTERVALS
-// const unsigned long VFR_MS = 200;
-// unsigned long lastVfr = 0;
-// const float ALERT_THRESHOLD_DEG = 40.0f;
-// const unsigned long ALERT_DEBOUNCE_MS = 2000;
-// const unsigned long HEARTBEAT_MS = 1000;
-// const unsigned long ATT_MS       = 50;
-// const unsigned long ALT_MS       = 300;
-// const unsigned long PARAM_REQUEST_INTERVAL = 1000;
-// const unsigned long GPS_MS = 500;
-// unsigned long lastGps = 0;
-// bool MAV_BOOL_FALSE = false;
-// unsigned long lastHb  = 0;
-// unsigned long lastParamRequest = 0;
-// unsigned long lastAtt = 0;
-// unsigned long lastAlt = 0;
-// unsigned long lastAlert = 0;
-
-// // SEND MAVLINK THROUGH USB
-// // void mavSend(mavlink_message_t *msg) {
-// //     uint8_t buf[MAVLINK_MAX_PACKET_LEN];
-// //     uint16_t len = mavlink_msg_to_send_buffer(buf, msg);
-// //     Serial.write(buf, len);
-// // }
-
-// //enum & status
-// static inline void mavWrite(HardwareSerial& port, const mavlink_message_t& msg) {
-//   uint8_t buf[MAVLINK_MAX_PACKET_LEN];
-//   uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
-//   port.write(buf, len);
-// }
-
-// // overload untuk USB Serial (bukan HardwareSerial) // basic mavlink write function
-// static inline void mavWriteUSB(Stream& port, const mavlink_message_t& msg) {
-//   uint8_t buf[MAVLINK_MAX_PACKET_LEN];
-//   uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
-//   port.write(buf, len);
-// }
-
-// void mavSendAll(const mavlink_message_t& msg) {
-//   mavWriteUSB(Serial, msg);     // USB ke GCS
-//   mavWrite(Serial2, msg);       // Telemetry UART
-//   mavWrite(Serial7, msg);       // RPi UART
-// }
-
-// //=========HELPER FUNCTIONS FOR MAVLINK MESSAGE HANDLING========//
-
-// // Fungsi untuk mengirim COMMAND_ACK
-// void sendCommandAck(uint16_t command, uint8_t result) {
-//     mavlink_message_t msg;
-//     mavlink_msg_command_ack_pack(
-//         SYSTEM_ID,
-//         COMPONENT_ID,
-//         &msg,
-//         command,
-//         result,
-//         0, 0, 0, 0
-//     );
-//     mavSendAll(msg);
-// }
-
-// // Fungsi untuk mengirim STATUSTEXT
-// void sendStatusText(uint8_t severity, const char* text) {
-//     mavlink_message_t msg;
-//     mavlink_msg_statustext_pack(
-//         SYSTEM_ID,
-//         COMPONENT_ID,
-//         &msg,
-//         severity,
-//         text
-//     );
-//     mavSendAll(msg);
-// }
-
-// //=========== HANDLER FUNCTIONS FOR MAVLINK COMMANDS ==========//
-// void handleCommandLong(const mavlink_message_t& msg) {
-//     mavlink_command_long_t cmd;
-//     mavlink_msg_command_long_decode(&msg, &cmd);
-    
-//     // Cek apakah ditujukan untuk system ini
-//     if (cmd.target_system != SYSTEM_ID && cmd.target_system != 0) {
-//         return;
-//     }
-    
-//     uint8_t result = MAV_RESULT_UNSUPPORTED;
-    
-//     switch (cmd.command) {
-//         case MAV_CMD_COMPONENT_ARM_DISARM: {
-//             float arm_value = cmd.param1;
-//             float force = cmd.param2;
-            
-//             Serial.printf("ARM REQ: arm=%.1f, force=%.1f, GPS=%d\n", arm_value, force, gepees.getStatus());
-            
-//             if (arm_value == 1.0f) {
-//                 // ARM REQUEST
-//                 bool can_arm = true;
-//                 // Pre-arm checks
-//                 if (gepees.getStatus() < 2 && force != 21196.0f) {
-//                     result = MAV_RESULT_DENIED;
-//                     sendStatusText(MAV_SEVERITY_WARNING, "ARM DENIED: MAKANYA JANGAN JOMBLO");
-//                     break;
-//                 }
-
-//                 // if (!imu.isValid()) {
-//                 //     result = MAV_RESULT_DENIED;
-//                 //     sendStatusText(MAV_SEVERITY_WARNING, "KAMU JOMBLO SIH");
-//                 //     break;
-//                 // }
-                
-//                 if (can_arm || force == 21196.0f) {
-//                     arming = true;
-//                     result = MAV_RESULT_ACCEPTED;
-//                     sendStatusText(MAV_SEVERITY_INFO, "ARMED");
-//                     Serial.println("ARMED");
-//                 } else {
-//                     result = MAV_RESULT_DENIED;
-//                     sendStatusText(MAV_SEVERITY_WARNING, "ARM DENIED");
-//                 }
-                
-//             } else if (arm_value == 0.0f) {
-//                 // DISARM REQUEST
-//                 arming = false;
-//                 result = MAV_RESULT_ACCEPTED;
-//                 sendStatusText(MAV_SEVERITY_INFO, "DISARMED");
-//                 Serial.println("DISARMED");
-//             }
-//             break;
-//         }
-        
-//         default:
-//             result = MAV_RESULT_UNSUPPORTED;
-//             break;
-//     }
-    
-//     // Kirim ACK
-//     sendCommandAck(cmd.command, result);
-// }
-
-// // Ini tempat kamu proses command/mission sebagai flight controller kamu
-// void processAsFC(const mavlink_message_t& msg, PortId from) {
-//     switch (msg.msgid) {
-//         case MAVLINK_MSG_ID_COMMAND_LONG:
-//             handleCommandLong(msg);
-//             break;
-            
-//         case MAVLINK_MSG_ID_MISSION_COUNT:
-//             // TODO: Handle mission upload
-//             break;
-            
-//         case MAVLINK_MSG_ID_PARAM_REQUEST_LIST:
-//             // TODO: Handle parameter request
-//             break;
-            
-//         default:
-//             // Message tidak diproses
-//             break;
-//     }
-// }
-
-// void forwardToOthers(const mavlink_message_t& msg, PortId from) {
-//   if (from != PORT_USB) mavWriteUSB(Serial, msg);
-//   if (from != PORT_TLM) mavWrite(Serial2, msg);
-//   if (from != PORT_RPI) mavWrite(Serial7, msg);
-// }
-
-// //=========== PORT HANDLER FUNCTIONS ==========//
-// void handlePortUSB() {
-//   while (Serial.available()) {
-//     uint8_t c = Serial.read();
-//     if (mavlink_parse_char(MAVLINK_COMM_0, c, &rxmsg, &st_usb)) {
-//       processAsFC(rxmsg, PORT_USB);
-//       forwardToOthers(rxmsg, PORT_USB);
-//     }
-//   }
-// }
-
-// void handlePortTLM() {
-//   while (Serial2.available()) {
-//     uint8_t c = Serial2.read();
-//     if (mavlink_parse_char(MAVLINK_COMM_1, c, &rxmsg, &st_tlm)) {
-//       processAsFC(rxmsg, PORT_TLM);
-//       forwardToOthers(rxmsg, PORT_TLM);
-//     }
-//   }
-// }
-
-// void handlePortRPI() {
-//   while (Serial7.available()) {
-//     uint8_t c = Serial7.read();
-//     if (mavlink_parse_char(MAVLINK_COMM_2, c, &rxmsg, &st_rpi)) {
-//       processAsFC(rxmsg, PORT_RPI);
-//       forwardToOthers(rxmsg, PORT_RPI);
-//     }
-//   }
-// }
-
-// // HEARTBEAT
-// // void sendHeartbeat() {
-// //     mavlink_message_t msg;
-// //     mavlink_msg_heartbeat_pack(
-// //         SYSTEM_ID,
-// //         COMPONENT_ID,
-// //         &msg,
-// //         MAV_TYPE_GENERIC,
-// //         MAV_AUTOPILOT_GENERIC,
-// //         MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
-// //         0,
-// //         MAV_STATE_ACTIVE
-// //     );
-// //     // uint8_t buf[MAVLINK_MAX_PACKET_LEN];
-// //     // uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
-// //     // Serial7.write(buf, len);
-// //     mavSendAll(msg);
-// // }
-
-// // =========== SEND MESSAGES ==========//
-// void sendHeartbeat() {
-//     mavlink_message_t msg;
-    
-//     uint8_t system_status = arming ? MAV_STATE_ACTIVE : MAV_STATE_STANDBY;
-//     uint8_t base_mode = MAV_MODE_FLAG_CUSTOM_MODE_ENABLED;
-    
-//     if (arming) {
-//         base_mode |= MAV_MODE_FLAG_SAFETY_ARMED;
-//     }
-    
-//     mavlink_msg_heartbeat_pack(
-//         SYSTEM_ID,
-//         COMPONENT_ID,
-//         &msg,
-//         MAV_TYPE_QUADROTOR,  // atau MAV_TYPE_GENERIC
-//         MAV_AUTOPILOT_GENERIC,
-//         base_mode,
-//         0,
-//         system_status
-//     );
-//     mavSendAll(msg);
-// }
-
-
-// // STATUSTEXT
-// void sendAlert(const char *txt) {
-//     mavlink_message_t msg;
-//     mavlink_msg_statustext_pack(
-//         SYSTEM_ID,
-//         COMPONENT_ID,
-//         &msg,
-//         MAV_SEVERITY_WARNING,
-//         txt
-//     );
-//     mavSendAll(msg);
-// }
-
-// //Altitude
-// void sendAltitude(float altitude) {
-//     mavlink_message_t msg;
-//     uint64_t t_usec = (uint64_t)getMillis() * 1000ULL;
-//     mavlink_msg_altitude_pack(
-//         SYSTEM_ID,
-//         COMPONENT_ID,
-//         &msg,
-//         t_usec, // time_usec
-//         altitude, // altitude_monotonic
-//         altitude, // altitude_amsl
-//         0, // altitude_local
-//         altitude, // altitude_relative, ini yang digunakan di MAVLink Inspector
-//         0, // altitude_terrain
-//         0.0f      // bottom_clearance
-//     );
-//     mavSendAll(msg);
-// }
-
-// // ATTITUDE
-// void sendAttitude(float roll_rad, float pitch_rad, float yaw_rad) {
-//     mavlink_message_t msg;
-//     mavlink_msg_attitude_pack(
-//         SYSTEM_ID,
-//         COMPONENT_ID,
-//         &msg,
-//         getMillis(),
-//         roll_rad,
-//         pitch_rad,
-//         yaw_rad,     // yaw
-//         0,0,0  // angular velocities
-//     );
-//     mavSendAll(msg);
-// }
-
-// // GPS_RAW_INT (untuk raw GPS data)
-// void sendGpsRawInt(float fix_type, float lat, float lon, float hdop, float vel, float satellites_visible) {
-//     mavlink_message_t msg;
-//     uint64_t t_usec = (uint64_t)getMillis() * 1000ULL;
-//     mavlink_msg_gps_raw_int_pack(
-//         SYSTEM_ID,
-//         COMPONENT_ID,
-//         &msg,
-//         t_usec,     // time_usec (uint64_t)
-//         fix_type,           // fix_type (uint8_t: 0-5)
-//         lat,                // lat (int32_t, degrees * 1e7)
-//         lon,                // lon (int32_t, degrees * 1e7)
-//         0,                // alt (int32_t, mm above MSL)
-//         hdop,                // eph (uint16_t, cm)
-//         0,                // epv (uint16_t, cm)
-//         vel,                // vel (uint16_t, cm/s)
-//         0,                // cog (uint16_t, degrees * 100)
-//         satellites_visible, // satellites_visible (uint8_t)
-//         0,                      // alt_ellipsoid (int32_t, mm)
-//         0,                      // h_acc (uint32_t, mm)
-//         0,                      // v_acc (uint32_t, mm)
-//         0,                      // vel_acc (uint32_t, mm/s)
-//         0                       // hdg_acc (uint32_t, degrees * 100000)
-//     );
-//     mavSendAll(msg);
-// }
-
-// // void handleIncomingMavlink() {
-// //     mavlink_message_t msg;
-// //     mavlink_status_t status;
-    
-// //     while (Serial.available() > 0) {
-// //         uint8_t c = Serial.read(); //keUSB
-// //         if (mavlink_parse_char(MAVLINK_COMM_0, c, &msg, &status)) {
-// //             // Handle PARAM_REQUEST_LIST
-// //             if (msg.msgid == MAVLINK_MSG_ID_PARAM_REQUEST_LIST) {
-// //                 // Send your parameters here
-// //             }
-// //             // Handle PARAM_REQUEST_READ
-// //             if (msg.msgid == MAVLINK_MSG_ID_PARAM_REQUEST_READ) {
-// //                 // Send specific parameter
-// //             }
-// //         }
-// //     }
-// // }
-
-// // void sendVfrHud(float alt_m, float climb_mps) {
-// //   mavlink_message_t msg;
-// //   mavlink_msg_vfr_hud_pack(
-// //     SYSTEM_ID,
-// //     COMPONENT_ID,
-// //     &msg,
-// //     0.0f,          // airspeed (m/s) - boleh 0
-// //     0.0f,          // groundspeed (m/s) - boleh 0
-// //     0,             // heading (deg) - boleh 0
-// //     0,             // throttle (%) - boleh 0
-// //     alt_m,         // altitude (m)
-// //     climb_mps      // climb rate (m/s)
-// //   );
-// //   mavSendAll(msg);
-// // }
-
-// // mavlink_msg_command_long_pack
-// // void armDisarmComponent(uint8_t arm, uint8_t force) {
-// //     mavlink_message_t msg;
-// //     mavlink_msg_command_long_pack(
-// //         SYSTEM_ID,
-// //         COMPONENT_ID,
-// //         &msg,
-// //         SYSTEM_ID,          // target_system
-// //         COMPONENT_ID,       // target_component
-// //         MAV_CMD_COMPONENT_ARM_DISARM, // command
-// //         0,                  // confirmation
-// //         arm,                // param1: 1 to arm, 0 to disarm
-// //         force,              // param2: force flag
-// //         0,0,0,0,0          // param3 - param7: unused
-// //     );
-// //     mavSendAll(msg);
-// // }
-
-// // GLOBAL_POSITION_INT (dengan GPS + altitude)
-// // void sendGlobalPositionInt() {
-// //     mavlink_message_t msg;
-// //     mavlink_msg_global_position_int_pack(
-// //         SYSTEM_ID,
-// //         COMPONENT_ID,
-// //         &msg,
-// //         getMillis(),            // time_boot_ms
-// //         gps.lat,                // lat (degrees * 1e7)
-// //         gps.lon,                // lon (degrees * 1e7)
-// //         gps.alt,                // alt in mm above MSL
-// //         (int32_t)(baro.altitude * 1000),  // relative_alt in mm
-// //         0,                      // vx (velocity x in cm/s)
-// //         0,                      // vy (velocity y in cm/s)
-// //         0,                      // vz (velocity z in cm/s)
-// //         0                       // hdg (heading in degrees * 100)
-// //     );
-// //     mavSend(&msg);
-// // }
-
-// void mavlinkTask() {
-//     unsigned long now = getMillis();
-//     // float roll_rad = imu.rad_roll;
-//     // float pitch_rad = imu.rad_pitch;
-//     // float yaw_rad = imu.rad_yaw;
-
-//     if (now - lastHb >= HEARTBEAT_MS) {
-//         lastHb = now;
-//         sendHeartbeat();
-//     }
-
-//     // ALTITUDE
-//     if (now - lastAlt >= ALT_MS) {
-//         lastAlt = now;
-//         float alt = baro.altitude;  // Ganti dengan sensor altitude sebenarnya
-//         sendAltitude(alt);
-//         // Serial.printf("Altitude sent: %.2f m\n", alt);  // Debug
-//     }
-
-//     // GPS
-//     if (now - lastGps >= GPS_MS) {
-//         lastGps = now;
-//         sendGpsRawInt(
-//             gepees.getStatus(),
-//             gepees.latitude * 1e7,
-//             gepees.longitude * 1e7,
-//             gepees.hdop * 100, // convert to cm
-//             gepees.speed_mps * 100, // convert m/s to cm/s
-//             gepees.satellites
-//         );
-//         // sendGlobalPositionInt();
-//         // Serial.printf("GPS sent: lat=%.7f, lon=%.7f, alt=%.2f m, sats=%d\n", 
-//         //     gepees.latitude/1e7, gepees.longitude/1e7, gepees.satellites);
-//     }
-
-//     // ATTITUDE
-//     if (now - lastAtt >= ATT_MS) {
-//         lastAtt = now;
-//         sendAttitude(imu.rad_roll, imu.rad_pitch, imu.rad_yaw);
-//     }
-
-//     // ALERT logic
-//     if (fabs(imu.roll) > ALERT_THRESHOLD_DEG) {
-//         if (now - lastAlert >= ALERT_DEBOUNCE_MS) {
-//             char msg[50];
-//             snprintf(msg, sizeof(msg), "ALERT: ROLL LIMIT (%.1f deg)", imu.roll);
-//             sendAlert(msg);
-//             // Serial.println(msg);
-//             lastAlert = now;
-//         }
-//     }
-    
-//     // ARM/DISARM LOGIC
-//     // armDisarmComponent(arming, MAV_BOOL_FALSE);
-    
-//     // if (now - lastVfr >= VFR_MS) {
-//     // lastVfr = now;
-//     // sendVfrHud(baro.altitude, 0.0f);
-//     // }
-
-
-//     // if (now - lastParamRequest >= PARAM_REQUEST_INTERVAL) {      //dihapus aja
-//     //     lastParamRequest = now;
-//     //     // handleIncomingMavlink();  // Replace with the actual parameter name
-//     // }
-// }
-    
-// #endif
-
 #ifndef MAV_H
 #define MAV_H
 
@@ -501,6 +8,10 @@
 #include "gps.h"
 #include <common/mavlink.h>
 #include <cstring>  // Untuk memset
+
+// External declarations untuk waypoint storage
+extern Locations waypoint[100];
+extern int wp_sum;
 
 // Enum for port IDs
 enum PortId { PORT_USB = 0, PORT_TLM = 1, PORT_RPI = 2 };
@@ -534,6 +45,17 @@ private:
     mavlink_status_t st_rpi;
     mavlink_message_t rxmsg;
 
+    // Mission upload state
+    uint16_t mission_count = 0;
+    uint16_t mission_items_received = 0;
+    bool mission_upload_in_progress = false;
+    unsigned long mission_timeout = 0;
+    const unsigned long MISSION_TIMEOUT_MS = 5000;  // 5 second timeout
+
+    // Mission download state
+    uint16_t mission_download_seq = 0;
+    bool mission_download_in_progress = false;
+
     // Private methods for internal use
     void mavWrite(HardwareSerial& port, const mavlink_message_t& msg);
     void mavWriteUSB(Stream& port, const mavlink_message_t& msg);
@@ -542,6 +64,15 @@ private:
     void sendStatusText(uint8_t severity, const char* text);
     void handleCommandLong(const mavlink_message_t& msg);
     void handleStatusText(const mavlink_message_t& msg);  // decode dan print STATUSTEXT
+    void handleMissionCount(const mavlink_message_t& msg);
+    void handleMissionItem(const mavlink_message_t& msg);
+    void sendMissionRequest(uint16_t sequence);
+    void sendMissionAck(uint8_t type);
+    void sendMissionCount(uint8_t target_system);
+    void sendMissionItem(uint16_t sequence);
+    void handleMissionRequestList(const mavlink_message_t& msg);
+    void handleMissionRequest(const mavlink_message_t& msg);
+    void handleClearMission(const mavlink_message_t& msg);
     void processAsFC(const mavlink_message_t& msg, PortId from);
     void forwardToOthers(const mavlink_message_t& msg, PortId from);
     void sendHeartbeat();
@@ -627,6 +158,227 @@ void MavlinkHandler::sendCustomTextToGCS(const char* text) {
     sendStatusText(MAV_SEVERITY_INFO, text);  // Kirim dengan severity INFO (bisa ubah)
 }
 
+// Send MISSION_REQUEST to request waypoint from GCS
+void MavlinkHandler::sendMissionRequest(uint16_t sequence) {
+    mavlink_message_t msg;
+    mavlink_msg_mission_request_pack(
+        SYSTEM_ID,
+        COMPONENT_ID,
+        &msg,
+        0,              // target_system (0 = broadcast)
+        0,              // target_component
+        sequence,       // seq
+        MAV_MISSION_TYPE_MISSION  // mission_type
+    );
+    mavSendAll(msg);
+    Serial.printf("Requesting WP#%d\n", sequence);
+}
+
+// Send MISSION_ACK when mission upload complete
+void MavlinkHandler::sendMissionAck(uint8_t type) {
+    mavlink_message_t msg;
+    mavlink_msg_mission_ack_pack(
+        SYSTEM_ID,
+        COMPONENT_ID,
+        &msg,
+        0,              // target_system (0 = broadcast)
+        0,              // target_component
+        type,           // type: 0=success, 1=error, etc
+        MAV_MISSION_TYPE_MISSION  // mission_type
+    );
+    mavSendAll(msg);
+    Serial.printf("Mission ACK sent (type=%d)\n", type);
+}
+
+// Handle MISSION_COUNT message from GCS
+void MavlinkHandler::handleMissionCount(const mavlink_message_t& msg) {
+    mavlink_mission_count_t count_msg;
+    mavlink_msg_mission_count_decode(&msg, &count_msg);
+
+    mission_count = count_msg.count;
+    mission_items_received = 0;
+    mission_upload_in_progress = true;
+    mission_timeout = getMillis();
+
+    Serial.printf("Mission upload started: expecting %d waypoints\n", mission_count);
+    
+    // Request first waypoint (index 0)
+    if (mission_count > 0) {
+        sendMissionRequest(0);
+    } else {
+        // No waypoints to upload
+        sendMissionAck(0);  // MAV_MISSION_ACCEPTED
+        mission_upload_in_progress = false;
+    }
+}
+
+// Handle MISSION_ITEM message from GCS
+void MavlinkHandler::handleMissionItem(const mavlink_message_t& msg) {
+    if (!mission_upload_in_progress) {
+        Serial.println("Warning: Received MISSION_ITEM but no upload in progress");
+        return;
+    }
+
+    // Check timeout
+    if (getMillis() - mission_timeout > MISSION_TIMEOUT_MS) {
+        Serial.println("ERROR: Mission upload timeout!");
+        mission_upload_in_progress = false;
+        sendMissionAck(1);  // MAV_MISSION_ERROR
+        return;
+    }
+
+    mavlink_mission_item_int_t mission_item;
+    
+    // Try to decode as mission_item_int first (more precise)
+    if (msg.msgid == MAVLINK_MSG_ID_MISSION_ITEM_INT) {
+        mavlink_msg_mission_item_int_decode(&msg, &mission_item);
+    } else {
+        // Fallback untuk mission_item (old format)
+        mavlink_mission_item_t old_format;
+        mavlink_msg_mission_item_decode(&msg, &old_format);
+        mission_item.x = (int32_t)(old_format.x * 1e7);
+        mission_item.y = (int32_t)(old_format.y * 1e7);
+        mission_item.z = old_format.z;
+        mission_item.seq = old_format.seq;
+    }
+
+    uint16_t wp_index = mission_item.seq;
+
+    // Store waypoint in array
+    if (wp_index < 100) {
+        waypoint[wp_index].lat = mission_item.x;      // lat in degrees * 1e7
+        waypoint[wp_index].lng = mission_item.y;      // lng in degrees * 1e7
+        waypoint[wp_index].alt = (int32_t)(mission_item.z * 100);  // alt in cm
+
+        mission_items_received++;
+        Serial.printf("WP#%d received: lat=%.7f, lng=%.7f, alt=%.2f m\n",
+                      wp_index,
+                      mission_item.x / 1e7,
+                      mission_item.y / 1e7,
+                      mission_item.z);
+
+        // Request next waypoint or complete upload
+        if (mission_items_received < mission_count) {
+            sendMissionRequest(mission_items_received);
+        } else {
+            // All waypoints received
+            wp_sum = mission_count;  // Update total waypoint count
+            Serial.printf("Mission upload complete! Total waypoints: %d\n", wp_sum);
+            sendMissionAck(0);  // MAV_MISSION_ACCEPTED
+            mission_upload_in_progress = false;
+        }
+    } else {
+        Serial.printf("ERROR: Waypoint index %d out of range!\n", wp_index);
+        sendMissionAck(1);  // MAV_MISSION_ERROR
+        mission_upload_in_progress = false;
+    }
+}
+
+// Send MISSION_COUNT to GCS (when GCS requests mission list)
+void MavlinkHandler::sendMissionCount(uint8_t target_system) {
+    mavlink_message_t msg;
+    mavlink_msg_mission_count_pack(
+        SYSTEM_ID,
+        COMPONENT_ID,
+        &msg,
+        target_system,
+        0,              // target_component
+        wp_sum,         // count: jumlah waypoint yang ada
+        MAV_MISSION_TYPE_MISSION
+    );
+    mavSendAll(msg);
+    Serial.printf("Mission count sent: %d waypoints\n", wp_sum);
+}
+
+// Send individual MISSION_ITEM to GCS
+void MavlinkHandler::sendMissionItem(uint16_t sequence) {
+    if (sequence >= wp_sum) {
+        Serial.printf("ERROR: Sequence %d out of range (total WP: %d)\n", sequence, wp_sum);
+        return;
+    }
+
+    mavlink_message_t msg;
+    
+    // Gunakan MISSION_ITEM_INT untuk precision lebih baik
+    mavlink_msg_mission_item_int_pack(
+        SYSTEM_ID,
+        COMPONENT_ID,
+        &msg,
+        0,              // target_system (broadcast)
+        0,              // target_component
+        sequence,       // seq
+        MAV_FRAME_GLOBAL_RELATIVE_ALT,  // frame
+        MAV_CMD_NAV_WAYPOINT,           // command
+        0,              // current (0=not current)
+        1,              // autocontinue
+        0, 0, 0, 0,     // param1-4 (unused for waypoint)
+        waypoint[sequence].lat,         // x = latitude (int32, degrees * 1e7)
+        waypoint[sequence].lng,         // y = longitude (int32, degrees * 1e7)
+        waypoint[sequence].alt / 100.0f, // z = altitude (float, in meters)
+        MAV_MISSION_TYPE_MISSION
+    );
+    mavSendAll(msg);
+    Serial.printf("Sent WP#%d: lat=%.7f, lng=%.7f, alt=%.2f m\n",
+                  sequence,
+                  waypoint[sequence].lat / 1e7,
+                  waypoint[sequence].lng / 1e7,
+                  waypoint[sequence].alt / 100.0f);
+}
+
+// Handle MISSION_REQUEST_LIST from GCS (user click "Read Waypoints")
+void MavlinkHandler::handleMissionRequestList(const mavlink_message_t& msg) {
+    mavlink_mission_request_list_t req_list;
+    mavlink_msg_mission_request_list_decode(&msg, &req_list);
+
+    Serial.printf("Mission request list received from sys %d, comp %d\n", 
+        req_list.target_system, req_list.target_component);
+
+    // Start mission download
+    mission_download_in_progress = true;
+    mission_download_seq = 0;
+
+    // Send total mission count
+    sendMissionCount(msg.sysid);  // Send count to the requester
+}
+
+// Handle MISSION_REQUEST from GCS (request individual waypoint during download)
+void MavlinkHandler::handleMissionRequest(const mavlink_message_t& msg) {
+    if (!mission_download_in_progress) {
+        Serial.println("Warning: Received MISSION_REQUEST but no download in progress");
+        return;
+    }
+
+    mavlink_mission_request_int_t req;
+    
+    // Try MISSION_REQUEST_INT first
+    if (msg.msgid == MAVLINK_MSG_ID_MISSION_REQUEST_INT) {
+        mavlink_msg_mission_request_int_decode(&msg, &req);
+    } else {
+        // Fallback to old MISSION_REQUEST format
+        mavlink_mission_request_t old_req;
+        mavlink_msg_mission_request_decode(&msg, &old_req);
+        req.seq = old_req.seq;
+    }
+
+    mission_download_seq = req.seq;
+
+    // Send the requested waypoint
+    if (req.seq < wp_sum) {
+        sendMissionItem(req.seq);
+    } else {
+        // Download complete or invalid index
+        if (req.seq == wp_sum) {
+            // GCS is requesting the mission end marker
+            Serial.printf("Mission download complete\n");
+            mission_download_in_progress = false;
+            // Send mission ack to indicate completion
+            sendMissionAck(0);  // MAV_MISSION_ACCEPTED
+        } else {
+            Serial.printf("ERROR: Invalid mission sequence %d\n", req.seq);
+        }
+    }
+}
+
 // Handle COMMAND_LONG
 void MavlinkHandler::handleCommandLong(const mavlink_message_t& msg) {
     mavlink_command_long_t cmd;
@@ -688,7 +440,22 @@ void MavlinkHandler::processAsFC(const mavlink_message_t& msg, PortId from) {
             handleStatusText(msg);
             break;
         case MAVLINK_MSG_ID_MISSION_COUNT:
-            // TODO: Handle mission upload
+            handleMissionCount(msg);
+            break;
+        case MAVLINK_MSG_ID_MISSION_ITEM:
+            handleMissionItem(msg);
+            break;
+        case MAVLINK_MSG_ID_MISSION_ITEM_INT:
+            handleMissionItem(msg);
+            break;
+        case MAVLINK_MSG_ID_MISSION_REQUEST_LIST:
+            handleMissionRequestList(msg);
+            break;
+        case MAVLINK_MSG_ID_MISSION_REQUEST:
+            handleMissionRequest(msg);
+            break;
+        case MAVLINK_MSG_ID_MISSION_REQUEST_INT:
+            handleMissionRequest(msg);
             break;
         case MAVLINK_MSG_ID_PARAM_REQUEST_LIST:
             // TODO: Handle parameter request
