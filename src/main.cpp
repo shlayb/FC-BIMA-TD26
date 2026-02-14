@@ -191,13 +191,13 @@ void buzzerTask(void *pvParameters) {
 }
 
 void printUSB() {
-    if(Serial.available()){
-        char c = Serial.read();
-        if(c=='z') mode_now = 1;
-        if(c=='x') mode_now = 2;
-        if(c=='c') mode_now = 3;
-        if(c=='v') mode_now = 4;
-    }
+    // if(Serial.available()){
+    //     char c = Serial.read();
+    //     if(c=='z') mode_now = 1;
+    //     if(c=='x') mode_now = 2;
+    //     if(c=='c') mode_now = 3;
+    //     if(c=='v') mode_now = 4;
+    // }
     // Serial.print(" Ele : ");
     // Serial.print(ch_roll);
     // Serial.print(" Millis : ");
