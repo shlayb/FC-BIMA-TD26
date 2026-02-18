@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-int mode_phase,Mode;
+extern int mode_phase,Mode;
 
 enum class ModeId : uint8_t { COPT, QHOV, MANU, FBWA, AUTO, TRNS, COUNT };
 
@@ -74,8 +74,8 @@ private:
   const char* _code4 = "UNKN";
 };
 
-ModeId current;
+extern ModeId current;
 
-ModeManager       modes;
+extern ModeManager modes;
 
-ModeId active_mode;
+extern ModeId active_mode;

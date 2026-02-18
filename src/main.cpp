@@ -49,6 +49,14 @@ Telemetry telem;
 GPSTelemetry rasprint;
 MavlinkHandler mavHandler;
 
+int mode_phase = 0;
+int Mode = 0;
+ModeId current = ModeId::MANU;
+ModeManager modes;
+ModeId active_mode = ModeId::MANU;
+int mode_now = 0;
+int prev_mode = 0;
+
 TaskHandle_t Task_IMU;
 TaskHandle_t Task_BARO;
 TaskHandle_t Task_GPS;
@@ -471,15 +479,15 @@ void wp_setup() {
 
     //WP SIMULASI 1 SUMBER ARUM
     add_waypoint(0, 0, 69 * M_TO_CM, 0);
-    add_waypoint(-77671400, 1102340100, 90 * M_TO_CM, 1);  // wp1 
-    add_waypoint(-77679300, 1102340400, 100 * M_TO_CM, 2);  // wp2 
-    add_waypoint(-77683800, 1102345800, 110 * M_TO_CM, 3);  // wp3
-    add_waypoint(-77683400, 1102354100, 110 * M_TO_CM, 4);  // wp4
-    add_waypoint(-77658400, 1102364200, 110 * M_TO_CM, 5);  // wp5
-    add_waypoint(-77652000, 1102359400, 110 * M_TO_CM, 6);  // wp6
-    add_waypoint(-77650400, 1102348200, 100 * M_TO_CM, 7);  // wp7
-    add_waypoint(-77660000, 1102341800, 90 * M_TO_CM, 8);  // wp8
-    add_waypoint(-77672500, 1102336300, 90 * M_TO_CM, 9);  // wp9
+    add_waypoint(-77671400, 1102340100, 75 * M_TO_CM, 1);  // wp1 
+    add_waypoint(-77679300, 1102340400, 75 * M_TO_CM, 2);  // wp2 
+    add_waypoint(-77683800, 1102345800, 75 * M_TO_CM, 3);  // wp3
+    add_waypoint(-77683400, 1102354100, 75 * M_TO_CM, 4);  // wp4
+    add_waypoint(-77658400, 1102364200, 75 * M_TO_CM, 5);  // wp5
+    add_waypoint(-77652000, 1102359400, 75 * M_TO_CM, 6);  // wp6
+    add_waypoint(-77650400, 1102348200, 75 * M_TO_CM, 7);  // wp7
+    add_waypoint(-77660000, 1102341800, 75 * M_TO_CM, 8);  // wp8
+    add_waypoint(-77672500, 1102336300, 75 * M_TO_CM, 9);  // wp9
     
     // ======= WAYPOINT AKTIF (Terintegrasi dengan Mission Planner) =======
     // Format: add_waypoint(lat*1e7, lng*1e7, altitude_CM, index)

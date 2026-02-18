@@ -6,6 +6,8 @@
 #include "AHRS.h"
 #include "Radio.h"
 #include "gps.h"
+#include "Mode_setup.h"
+#include "Voltage.h"  // Untuk battery voltage dan percentage
 #include <common/mavlink.h>
 #include <cstring>  // Untuk memset
 #include <Locations.h>  // Untuk akses waypoint global
@@ -36,6 +38,7 @@ private:
     static const unsigned long ATT_MS = 50;
     static const unsigned long ALT_MS = 300;
     static const unsigned long GPS_MS = 500;
+    static const unsigned long BATTERY_MS = 1000;  // Battery status interval
     static const unsigned long PARAM_REQUEST_INTERVAL = 1000;
     static const uint16_t MAX_MISSION = 100;  // Same as waypoint[] size
 
@@ -47,6 +50,7 @@ private:
     unsigned long lastAtt = 0;
     unsigned long lastAlt = 0;
     unsigned long lastAlert = 0;
+    unsigned long lastBattery = 0;
 
     // MAVLink status and message buffers
     mavlink_status_t st_usb;
@@ -81,6 +85,10 @@ private:
     void sendAltitude(float altitude);
     void sendAttitude(float roll_rad, float pitch_rad, float yaw_rad);
     void sendGpsRawInt(uint8_t fix_type, int32_t lat, int32_t lon, uint16_t eph, uint16_t vel, uint8_t satellites_visible);
+    void sendMissionItemReached(uint16_t seq);
+    void sendBatteryStatus(float voltage, int16_t current_amp, int8_t battery_remaining);
+    uint8_t getBaseMode() const;
+    uint32_t getCustomMode() const;
 
 public:
     // Constructor for initialization
@@ -90,8 +98,12 @@ public:
     void mavlinkTask();  // Main periodic task
     void handlePorts();  // Handle incoming data from all ports
     void sendCustomTextToGCS(const char* text);  // Method baru: Kirim pesan custom ke GCS
+    void notifyWaypointReached(uint16_t seq);  // Notify when waypoint reached
     uint16_t getMissionCount() const { return wp_sum; }  // Get mission count (dari wp_sum global)
 };
+
+// Global helper function for waypoint notification
+void notifyWaypointReached(uint16_t seq);
 
 /////////////////////// Implementation ///////////////////////
 
@@ -596,11 +608,51 @@ void MavlinkHandler::forwardToOthers(const mavlink_message_t& msg, PortId from) 
 void MavlinkHandler::sendHeartbeat() {
     mavlink_message_t msg;
     uint8_t system_status = arming ? MAV_STATE_ACTIVE : MAV_STATE_STANDBY;
-    uint8_t base_mode = MAV_MODE_FLAG_CUSTOM_MODE_ENABLED;
-    if (arming) base_mode |= MAV_MODE_FLAG_SAFETY_ARMED;
+    uint8_t base_mode = getBaseMode();
+    if (arming) {
+        base_mode |= MAV_MODE_FLAG_SAFETY_ARMED;
+    }
 
-    mavlink_msg_heartbeat_pack(SYSTEM_ID, COMPONENT_ID, &msg, MAV_TYPE_QUADROTOR, MAV_AUTOPILOT_GENERIC, base_mode, 0, system_status);
+    uint32_t custom_mode = getCustomMode();
+    mavlink_msg_heartbeat_pack(
+        SYSTEM_ID,
+        COMPONENT_ID,
+        &msg,
+        MAV_TYPE_FIXED_WING,
+        MAV_AUTOPILOT_ARDUPILOTMEGA,
+        base_mode,
+        custom_mode,
+        system_status
+    );
     mavSendAll(msg);
+}
+
+uint8_t MavlinkHandler::getBaseMode() const {
+    // Provide base mode hints for Mission Planner
+    switch (current) {
+        case ModeId::MANU:
+            return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | MAV_MODE_FLAG_MANUAL_INPUT_ENABLED;
+        case ModeId::FBWA:
+            return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | MAV_MODE_FLAG_MANUAL_INPUT_ENABLED | MAV_MODE_FLAG_STABILIZE_ENABLED;
+        case ModeId::AUTO:
+            return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | MAV_MODE_FLAG_AUTO_ENABLED | MAV_MODE_FLAG_GUIDED_ENABLED;
+        default:
+            return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | MAV_MODE_FLAG_MANUAL_INPUT_ENABLED;
+    }
+}
+
+uint32_t MavlinkHandler::getCustomMode() const {
+    // ArduPlane mode mapping for Mission Planner display
+    switch (current) {
+        case ModeId::MANU:
+            return 0;   // MANUAL
+        case ModeId::FBWA:
+            return 5;   // FBWA
+        case ModeId::AUTO:
+            return 10;  // AUTO
+        default:
+            return 0;   // fallback to MANUAL
+    }
 }
 
 // Send ALERT (hanya 5 argumen untuk kompatibilitas)
@@ -631,6 +683,47 @@ void MavlinkHandler::sendGpsRawInt(uint8_t fix_type, int32_t lat, int32_t lon, u
     uint64_t t_usec = (uint64_t)getMillis() * 1000ULL;
     mavlink_msg_gps_raw_int_pack(SYSTEM_ID, COMPONENT_ID, &msg, t_usec, fix_type, lat, lon, 0, eph, 0, vel, 0, satellites_visible, 0, 0, 0, 0, 0);
     mavSendAll(msg);
+}
+
+// Send BATTERY_STATUS
+void MavlinkHandler::sendBatteryStatus(float voltage, int16_t current_amp, int8_t battery_remaining) {
+    mavlink_message_t msg;
+    // voltage: dalam millivolt (V * 1000)
+    // current: dalam centiamp (A * 100), -1 jika unknown
+    uint16_t voltage_mv = (uint16_t)(voltage * 1000.0f);
+    int16_t current_ca = (current_amp == 0) ? -1 : (current_amp * 100);
+    
+    mavlink_msg_battery_status_pack(
+        SYSTEM_ID,
+        COMPONENT_ID,
+        &msg,
+        0,              // id (battery ID)
+        0,              // battery_function (0 = unknown)
+        0,              // type (0 = unknown)
+        INT16_MAX,      // temperature (kelvin, -327.68 = unknown)
+        &voltage_mv,    // voltages array pointer
+        current_ca,     // current_battery (centiamps, -1 = unknown)
+        -1,             // current_consumed (mAh, -1 = unknown)
+        -1,             // energy_consumed (hJ, -1 = unknown)
+        battery_remaining, // battery_remaining (percentage, -1 = unknown)
+        0,              // time_remaining (minutes, 0 = unknown)
+        0               // charge_state (0 = unknown)
+    );
+    mavSendAll(msg);
+    Serial.printf("Battery: %.2fV, %d%%\n", voltage, battery_remaining);
+}
+
+// Send MISSION_ITEM_REACHED
+void MavlinkHandler::sendMissionItemReached(uint16_t seq) {
+    mavlink_message_t msg;
+    mavlink_msg_mission_item_reached_pack(SYSTEM_ID, COMPONENT_ID, &msg, seq);
+    mavSendAll(msg);
+    Serial.printf("WP %d reached\n", seq);
+}
+
+// Public method: notify when waypoint reached
+void MavlinkHandler::notifyWaypointReached(uint16_t seq) {
+    sendMissionItemReached(seq);
 }
 
 // Handle incoming data from all ports
@@ -698,11 +791,24 @@ void MavlinkHandler::mavlinkTask() {
             lastAlert = now;
         }
     }
+
+    if (now - lastBattery >= BATTERY_MS) {
+        lastBattery = now;
+        // Get battery data dari Voltage.h
+        // voltage: dalam volt, current: dalam mA (default 0 jika tidak ada sensor arus)
+        sendBatteryStatus(batt_v, 0, (int8_t)display_batt());
+    }
    
     // if (millis() - lastCustom >= 5000) {
     //     lastCustom = millis();
     //     sendCustomTextToGCS("Pesan custom dari FC!");
     // }
+}
+
+// Global helper function implementation
+void notifyWaypointReached(uint16_t seq) {
+    extern MavlinkHandler mavHandler;
+    mavHandler.notifyWaypointReached(seq);
 }
 
 #endif

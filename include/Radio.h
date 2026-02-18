@@ -32,7 +32,7 @@ bool transition_phase3 = false;
 bool mode_vtol = false;
 bool mode_safety = false;
 bool mode_vtol_plane = false;
-int mode_now, prev_mode;
+extern int mode_now, prev_mode;
 
 float outputScaler(uint16_t ch)
 // scaling data dr remote biar bs masuk ke perhitungan kendali, konversi ke bentuk sudut
@@ -170,20 +170,13 @@ void remote_loop() {
         //     mode_now = 3;
         // }
 
-        if (ch_mode < 1000) {  // Channel 6 low - Regular modes (1,2,3)
-            if (ch_mode_backup <= 1000) {
-                mode_now = 1;  // Mode 1: Both channels low
-            } else if (ch_mode_backup > 1000 && ch_mode_backup <= 1512) {
-                mode_now = 2;  // Mode 2: Ch7 middle
-            } else if (ch_mode_backup >= 1512) {
-                mode_now = 3;  // Mode 3: Ch7 high
-            }
-        } else {  // Channel 6 middle/high - Special modes (4,5)
-            if (ch_mode > 1000 && ch_mode <= 1512 && ch_mode_backup >= 1512) {
-                mode_now = 4;  // Mode 4: Ch6 middle, Ch7 high
-            } else if (ch_mode >= 1512 && ch_mode_backup >= 1512) {
-                mode_now = 5;  // Mode 5: Both channels high
-            }
+        // Mode selection uses ch7 only: low=MANU, mid=FBWA, high=AUTO
+        if (ch_mode_backup <= 1000) {
+            mode_now = 1;
+        } else if (ch_mode_backup > 1000 && ch_mode_backup <= 1512) {
+            mode_now = 2;
+        } else {
+            mode_now = 3;
         }
     }
 }

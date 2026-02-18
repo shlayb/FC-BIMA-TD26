@@ -11,6 +11,9 @@
 #include "Fuzzy_FW_Roll.h"
 // #include "Radio.h"
 
+// Forward declaration for waypoint notification
+void notifyWaypointReached(uint16_t seq);
+
 bool enable_throttle_nudge = true;
 int16_t throttle_nudge;
 uint32_t last_home_set_ms = 0;
@@ -181,6 +184,9 @@ void navigate() {
 
     if (auto_state.distance_next_wp <= acceptance_distance_m || current_loc.past_interval_finish_line(prev_WP_loc, next_WP_loc)) {
         if (auto_navigation_mode) {
+            // Notify GCS that waypoint is reached
+            notifyWaypointReached(flag_wp);
+            
             flag_wp++;
             if (flag_wp >= wp_sum) {
                 flag_wp = -1;
