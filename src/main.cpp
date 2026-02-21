@@ -199,13 +199,13 @@ void buzzerTask(void *pvParameters) {
 }
 
 void printUSB() {
-    // if(Serial.available()){
-    //     char c = Serial.read();
-    //     if(c=='z') mode_now = 1;
-    //     if(c=='x') mode_now = 2;
-    //     if(c=='c') mode_now = 3;
-    //     if(c=='v') mode_now = 4;
-    // }
+    if(Serial.available()){
+        char c = Serial.read();
+        if(c=='z') mode_now = 1;
+        if(c=='x') mode_now = 2;
+        if(c=='c') mode_now = 3;
+        if(c=='v') mode_now = 4;
+    }
     // Serial.print(" Ele : ");
     // Serial.print(ch_roll);
     // Serial.print(" Millis : ");
@@ -478,16 +478,16 @@ void wp_setup() {
     //  add_waypoint(-77669100, 1102339700, 90 * M_TO_CM, 6);  // wp6
 
     //WP SIMULASI 1 SUMBER ARUM
-    add_waypoint(0, 0, 69 * M_TO_CM, 0);
-    add_waypoint(-77671400, 1102340100, 75 * M_TO_CM, 1);  // wp1 
-    add_waypoint(-77679300, 1102340400, 75 * M_TO_CM, 2);  // wp2 
-    add_waypoint(-77683800, 1102345800, 75 * M_TO_CM, 3);  // wp3
-    add_waypoint(-77683400, 1102354100, 75 * M_TO_CM, 4);  // wp4
-    add_waypoint(-77658400, 1102364200, 75 * M_TO_CM, 5);  // wp5
-    add_waypoint(-77652000, 1102359400, 75 * M_TO_CM, 6);  // wp6
-    add_waypoint(-77650400, 1102348200, 75 * M_TO_CM, 7);  // wp7
-    add_waypoint(-77660000, 1102341800, 75 * M_TO_CM, 8);  // wp8
-    add_waypoint(-77672500, 1102336300, 75 * M_TO_CM, 9);  // wp9
+    // add_waypoint(0, 0, 69 * M_TO_CM, 0);
+    // add_waypoint(-77671400, 1102340100, 75 * M_TO_CM, 1);  // wp1 
+    // add_waypoint(-77679300, 1102340400, 75 * M_TO_CM, 2);  // wp2 
+    // add_waypoint(-77683800, 1102345800, 75 * M_TO_CM, 3);  // wp3
+    // add_waypoint(-77683400, 1102354100, 75 * M_TO_CM, 4);  // wp4
+    // add_waypoint(-77658400, 1102364200, 75 * M_TO_CM, 5);  // wp5
+    // add_waypoint(-77652000, 1102359400, 75 * M_TO_CM, 6);  // wp6
+    // add_waypoint(-77650400, 1102348200, 75 * M_TO_CM, 7);  // wp7
+    // add_waypoint(-77660000, 1102341800, 75 * M_TO_CM, 8);  // wp8
+    // add_waypoint(-77672500, 1102336300, 75 * M_TO_CM, 9);  // wp9
     
     // ======= WAYPOINT AKTIF (Terintegrasi dengan Mission Planner) =======
     // Format: add_waypoint(lat*1e7, lng*1e7, altitude_CM, index)
@@ -498,6 +498,11 @@ void wp_setup() {
     // add_waypoint(-77738260, 1103784420, 2 * M_TO_CM, 1);  // WP 1: ~2m altitude
     // add_waypoint(-77732600, 1103786320, 2 * M_TO_CM, 2);  // WP 2: ~2m altitude
     // add_waypoint(-77746550, 1103782450, 2 * M_TO_CM, 3);  // WP 3: ~2m altitude
+
+    add_waypoint(0, 0, 69 * M_TO_CM, 0); // home
+    add_waypoint(-77738260, 1103784420, 0.2 * M_TO_CM, 1);  // WP 1: ~2m altitude
+    add_waypoint(-77732600, 1103786320, 0.2 * M_TO_CM, 2);  // WP 2: ~2m altitude
+    add_waypoint(-77746550, 1103782450, 0.2 * M_TO_CM, 3);  // WP 3: ~2m altitude
     // =====================================================================
     
     // test waypoint D13 yang mirip di hanggar Sumberarum
@@ -552,8 +557,8 @@ void setup() {
     loop_timer = micros();
 
     // xTaskCreate(Print_To_Raspi, "PrintRaspi", 4096, NULL, 3, &Task_Raspi);
-    // xTaskCreate(Print_telem, "Telem", 2048, NULL, 2, &Task_Telem);
-    xTaskCreate(mavlink_print, "Mavlink", 2048, NULL, 2, &Task_Mavlink);
+    xTaskCreate(Print_telem, "Telem", 2048, NULL, 2, &Task_Telem);
+    // xTaskCreate(mavlink_print, "Mavlink", 2048, NULL, 2, &Task_Mavlink);
     // xTaskCreate(Print_task, "Print", 4096, NULL, 3, &Task_Print);
     xTaskCreate(radio, "Radio", 4096, NULL, 3, &Task_Print);
     xTaskCreate(airspeed, "Airspeed", 4096, NULL, 2, &Task_Print);

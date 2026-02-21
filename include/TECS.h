@@ -36,6 +36,11 @@
 
     float tes;
 
+    // Debug flag - set to true to enable TECS debugging via Serial2
+    // Default: false to avoid Serial2 overhead during flight
+    bool TECS_DEBUG = false;
+    uint32_t _last_debug_ms = 0;
+
     // Last time update_50Hz was called
     uint64_t _update_50hz_last_usec;
 
@@ -455,9 +460,13 @@ void update_50hz(void)
     /*
       if we have a vertical position estimate from the EKF then use
       it, otherwise use barometric altitude
+      NOTE: get_relative_position_D_home already returns negative of baro.altitude
+      In NED frame: down is positive, up is negative
+      For TECS height control: we want positive = above home
+      So we need to negate the value from get_relative_position_D_home
      */
     ahrs.get_relative_position_D_home(_height);
-    _height *= -1.0f;
+    _height *= -1.0f;  // Convert NED down-positive to height above home (up-positive)
 
     // Calculate time in seconds since last update
     uint64_t now = micros();
@@ -590,6 +599,31 @@ void _update_height_demand()
     hgt_dem_lag_filter_slew = 0;
     _hgt_dem_adj_last = _hgt_dem_adj;
     _hgt_dem_adj = new_hgt_dem;
+
+    // Calculate height rate demand based on altitude error
+    // This provides feedforward control to complement the integrator
+    // CRITICAL FIX: This was previously always zero, causing elevator to overshoot
+    float hgt_error = _hgt_dem_adj - _height;
+    
+    // Use adaptive time constant for better response at low altitudes
+    // For small altitude errors (< 3m), use faster response to prevent integrator windup
+    float adaptive_time_const = _timeConst;
+    if (fabsf(hgt_error) < 3.0f) {
+        // Scale time constant down for small errors (min 1.5s)
+        adaptive_time_const = MAX(1.5f, fabsf(hgt_error) * 0.5f + 1.0f);
+    }
+    
+    _hgt_rate_dem = hgt_error / adaptive_time_const;
+    // Limit height rate demand to max climb and sink rates
+    _hgt_rate_dem = constrain(_hgt_rate_dem, -_minSinkRate, _maxClimbRate);
+
+    // DEBUG: Altitude control values every 1000ms via Serial2
+    if (TECS_DEBUG && (millis() - _last_debug_ms > 1000)) {
+        char buf[100];
+        snprintf(buf, sizeof(buf), "[ALT] H:%.2f T:%.2f E:%.2f RD:%.2f", 
+                 _height, _hgt_dem_adj, hgt_error, _hgt_rate_dem);
+        Serial2.println(buf);
+    }
 }
 
 void _detect_underspeed(void)
@@ -626,7 +660,9 @@ void _detect_underspeed(void)
 
 void _update_energies(void){
     // Calculate specific energy demands
-    _SPE_dem = _hgt_dem * GRAVITY_MSS;
+    // Use filtered/rate-limited height demand (_hgt_dem_adj) instead of raw demand (_hgt_dem)
+    // This ensures energy calculations match the actual height demand being tracked
+    _SPE_dem = _hgt_dem_adj * GRAVITY_MSS;
     _SKE_dem = 0.5f * _TAS_dem_adj * _TAS_dem_adj;
 
     // Calculate specific energy rate demands and high pass filter demanded airspeed
@@ -862,6 +898,17 @@ void _update_pitch(void)
     // integrate SEB rate error and apply integrator state limits
     bool inhibit_integrator = ((_pitch_dem_unc > _PITCHmaxf) && integSEB_delta > 0.0f) ||
                                     ((_pitch_dem_unc < _PITCHminf) && integSEB_delta < 0.0f);
+    
+    // Additional anti-windup: prevent integrator windup when OVERSHOOTING target
+    // Only inhibit when altitude EXCEEDS target (prevents continuous climb after reaching altitude)
+    float alt_error_signed = _hgt_dem_adj - _height;  // positive = below target, negative = above target
+    if (alt_error_signed < -0.2f && integSEB_delta > 0.0f) {  // if 20cm above target and still requesting climb
+        inhibit_integrator = true;
+        if (TECS_DEBUG && (millis() - _last_debug_ms > 1000)) {
+            Serial2.println("[TECS] Windup inhibit");
+        }
+    }
+    
     if (!inhibit_integrator) {
         _integSEBdot += integSEB_delta;
         _integKE += (_SKE_est - _SKE_dem) * _SKE_weighting * _DT / timeConstant();
@@ -906,6 +953,8 @@ void _initialise_states(float hgt_afe)
     {
         _integTHR_state = 0.0f;
         _integSEB_state = 0.0f;
+        _integSEBdot = 0.0f;  // Reset pitch integrator
+        _integKE = 0.0f;      // Reset kinetic energy integrator
         _last_throttle_dem = THROTTLE_CRUISE * 0.01f;
         _last_pitch_dem = imu.pitch;
         _hgt_dem_adj_last = hgt_afe;
@@ -917,6 +966,12 @@ void _initialise_states(float hgt_afe)
         my_flags._flags.badDescent = false;
         _DT = 0.2f; // when first starting TECS, use a
         // small time constant
+        
+        if (TECS_DEBUG) {
+            char buf[60];
+            snprintf(buf, sizeof(buf), "[TECS] INIT hgt_afe:%.2fm", hgt_afe);
+            Serial2.println(buf);
+        }
     }
 }
 
@@ -942,6 +997,16 @@ void update_pitch_throttle( int32_t hgt_dem_cm,
     // Convert inputs
     _hgt_dem = hgt_dem_cm * 0.01; // konversi ke meter
     _EAS_dem = EAS_dem_cm; // equivalent airspeed
+    
+    // MAVLink DEBUG: Print input values on first valid call
+    static bool first_call = true;
+    if (TECS_DEBUG && first_call && _DT < 1.0f) {
+        char buf[80];
+        snprintf(buf, sizeof(buf), "[TECS] TGT:%.2fcm CUR:%.2fm EAS:%.1fm/s", 
+                 (float)hgt_dem_cm, hgt_afe, EAS_dem_cm);
+        Serial2.println(buf);
+        first_call = false;
+    }
 
     // Update the speed estimate using a 2nd order complementary filter
     _update_speed(load_factor);
@@ -1027,6 +1092,15 @@ void update_pitch_throttle( int32_t hgt_dem_cm,
 
     // Calculate pitch demand
     _update_pitch(); // ngehasilin nilai pitch
+
+    // DEBUG: Pitch and integrator values every 1000ms via Serial2
+    if (TECS_DEBUG && (millis() - _last_debug_ms > 1000)) {
+        char buf[80];
+        snprintf(buf, sizeof(buf), "[PIT] P:%.1f IS:%.2f IK:%.2f T:%d%%", 
+                 _pitch_dem * 57.3f, _integSEBdot, _integKE, (int)(_throttle_dem * 100));
+        Serial2.println(buf);
+        _last_debug_ms = millis();
+    }
 }
 
 

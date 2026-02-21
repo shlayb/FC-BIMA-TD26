@@ -220,6 +220,49 @@ void MavlinkHandler::handleCommandLong(const mavlink_message_t& msg) {
             }
             break;
         }
+
+        case MAV_CMD_DO_SET_MODE: {
+            // param1: mode (base mode bitmask or custom mode number)
+            // param2: custom mode (ArduPlane mode number)
+            uint32_t custom_mode = (uint32_t)cmd.param2;
+            
+            Serial.printf("MODE CHANGE REQ: custom_mode=%d\n", custom_mode);
+            
+            // Map ArduPlane custom modes to internal mode_now
+            // ArduPlane: MANUAL=0, FBWA=5, AUTO=10
+            int new_mode = 0;
+            const char* mode_name = "UNKNOWN";
+            
+            if (custom_mode == 0) {
+                // MANUAL mode
+                new_mode = 1;
+                mode_name = "MANUAL";
+            } else if (custom_mode == 5) {
+                // FBWA mode
+                new_mode = 2;
+                mode_name = "FBWA";
+            } else if (custom_mode == 10) {
+                // AUTO mode
+                new_mode = 3;
+                mode_name = "AUTO";
+            } else {
+                // Unsupported mode
+                result = MAV_RESULT_UNSUPPORTED;
+                sendStatusText(MAV_SEVERITY_WARNING, "MODE NOT SUPPORTED");
+                break;
+            }
+            
+            // Set the mode
+            mode_now = new_mode;
+            result = MAV_RESULT_ACCEPTED;
+            
+            char msg_buf[50];
+            snprintf(msg_buf, sizeof(msg_buf), "MODE: %s", mode_name);
+            sendStatusText(MAV_SEVERITY_INFO, msg_buf);
+            Serial.printf("Mode switched to: %s (mode_now=%d)\n", mode_name, new_mode);
+            break;
+        }
+
         default:
             result = MAV_RESULT_UNSUPPORTED;
             break;
