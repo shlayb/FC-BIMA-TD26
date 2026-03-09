@@ -7,6 +7,7 @@
 #include "Radio.h"
 #include "gps.h"
 #include "Mode_setup.h"
+#include "Auto_setup.h"  // Untuk akses auto_state struct
 #include "Voltage.h"  // Untuk battery voltage dan percentage
 #include <common/mavlink.h>
 #include <cstring>  // Untuk memset
@@ -39,6 +40,7 @@ private:
     static const unsigned long ALT_MS = 300;
     static const unsigned long GPS_MS = 500;
     static const unsigned long BATTERY_MS = 1000;  // Battery status interval
+    static const unsigned long NAV_CONTROLLER_MS = 200;  // Navigation controller output interval
     static const unsigned long PARAM_REQUEST_INTERVAL = 1000;
     static const uint16_t MAX_MISSION = 100;  // Same as waypoint[] size
 
@@ -51,6 +53,7 @@ private:
     unsigned long lastAlt = 0;
     unsigned long lastAlert = 0;
     unsigned long lastBattery = 0;
+    unsigned long lastNavController = 0;
 
     // MAVLink status and message buffers
     mavlink_status_t st_usb;
@@ -87,6 +90,7 @@ private:
     void sendGpsRawInt(uint8_t fix_type, int32_t lat, int32_t lon, uint16_t eph, uint16_t vel, uint8_t satellites_visible);
     void sendMissionItemReached(uint16_t seq);
     void sendBatteryStatus(float voltage, int16_t current_amp, int8_t battery_remaining);
+    void sendNavControllerOutput(float nav_roll, float nav_pitch, float nav_bearing, float target_bearing, float wp_dist, float alt_error, float aspd_error, float xtrack_error);
     uint8_t getBaseMode() const;
     uint32_t getCustomMode() const;
 
@@ -756,6 +760,25 @@ void MavlinkHandler::sendBatteryStatus(float voltage, int16_t current_amp, int8_
     Serial.printf("Battery: %.2fV, %d%%\n", voltage, battery_remaining);
 }
 
+// Send NAV_CONTROLLER_OUTPUT - Navigation controller output dengan distance ke next WP
+void MavlinkHandler::sendNavControllerOutput(float nav_roll, float nav_pitch, float nav_bearing, float target_bearing, float wp_dist, float alt_error, float aspd_error, float xtrack_error) {
+    mavlink_message_t msg;
+    mavlink_msg_nav_controller_output_pack(
+        SYSTEM_ID,
+        COMPONENT_ID,
+        &msg,
+        nav_roll,       // roll commanded by autopilot (rad)
+        nav_pitch,      // pitch commanded by autopilot (rad)
+        nav_bearing,    // bearing to waypoint (rad)
+        target_bearing, // bearing to current waypoint (rad)
+        wp_dist,        // distance to active waypoint (m) ← auto_state.distance_next_wp
+        alt_error,      // altitude error (m)
+        aspd_error,     // airspeed error (m/s)
+        xtrack_error    // crosstrack error (m)
+    );
+    mavSendAll(msg);
+}
+
 // Send MISSION_ITEM_REACHED
 void MavlinkHandler::sendMissionItemReached(uint16_t seq) {
     mavlink_message_t msg;
@@ -840,6 +863,21 @@ void MavlinkHandler::mavlinkTask() {
         // Get battery data dari Voltage.h
         // voltage: dalam volt, current: dalam mA (default 0 jika tidak ada sensor arus)
         sendBatteryStatus(batt_v, 0, (int8_t)display_batt());
+    }
+
+    if (now - lastNavController >= NAV_CONTROLLER_MS) {
+        lastNavController = now;
+        // Send navigation controller output dengan distance to next waypoint
+        float nav_roll = imu.rad_roll;      // Roll commanded
+        float nav_pitch = imu.rad_pitch;    // Pitch commanded
+        float nav_bearing = atan2(0, 0);   // TODO: heading to waypoint (rad)
+        float target_bearing = atan2(0, 0); // TODO: current waypoint bearing (rad)
+        float wp_dist = auto_state.distance_next_wp;   // Distance to next waypoint (m)
+        float alt_error = 0;                // TODO: altitude error from navigation
+        float aspd_error = 0;               // TODO: airspeed error from FW controller
+        float xtrack_error = 0;             // TODO: crosstrack error from L1 controller
+        
+        sendNavControllerOutput(nav_roll, nav_pitch, nav_bearing, target_bearing, wp_dist, alt_error, aspd_error, xtrack_error);
     }
    
     // if (millis() - lastCustom >= 5000) {

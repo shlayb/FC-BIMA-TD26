@@ -54,10 +54,10 @@ void Telemetry::pid_gain_tuning() {
         char selector = Serial2.read();
 
         if (true) {
-            if(selector=='z') mode_now = 1;
-            if(selector=='x') mode_now = 2;
-            if(selector=='c') mode_now = 3;
-            if(selector=='v') mode_now = 4;
+            // if(selector=='z') mode_now = 1;
+            // if(selector=='x') mode_now = 2;
+            // if(selector=='c') mode_now = 3;
+            // if(selector=='v') mode_now = 4;
             switch (selector) {
                 case 'Q':
                 case 'q':
@@ -159,8 +159,8 @@ void Telemetry::pid_gain_tuning() {
     Serial2.print(wp_sum);
     Serial2.print(" wp:");
     Serial2.print(flag_wp);
-    // Serial2.print(" dist:");
-    // Serial2.print(auto_state.distance_next_wp/*current_loc.get_distance(next_WP_loc)*/);
+    Serial2.print(" dist:");
+    Serial2.print(auto_state.distance_next_wp/*current_loc.get_distance(next_WP_loc)*/);
     // Serial2.print(" | r:");
     // Serial2.print(imu.roll);
     // Serial2.print(" | p:");
@@ -194,20 +194,6 @@ void Telemetry::pid_gain_tuning() {
     // Serial2.print(" |ch_yaw:");
     // Serial2.print(ch_yaw);
     
-    // ===== TECS DEBUG INFO =====
-    Serial2.print(" |TECS_TGT:");
-    Serial2.print(target_altitude.amsl_cm/100.0f, 2);  // Target altitude in meters
-    Serial2.print("m |TECS_CUR:");
-    Serial2.print(baro.altitude, 2);  // Current altitude in meters
-    Serial2.print("m |TECS_ERR:");
-    float alt_error = (target_altitude.amsl_cm/100.0f) - baro.altitude;
-    Serial2.print(alt_error, 2);  // Altitude error
-    Serial2.print("m |PITCH_DEM:");
-    Serial2.print(get_pitch_demand(), 1);  // Pitch demand in centi-degrees
-    Serial2.print("cd |THR_DEM:");
-    Serial2.print(get_throttle_demand(), 1);  // Throttle demand in percent
-    Serial2.print("% |CLM_RATE:");
-    Serial2.print(baro.get_climb_rate() * 1.0e-3f, 2);  // Climb rate in m/s
     // Serial2.print(" bearing_error:");
     // Serial2.print(_bearing_error);
     // Serial2.print(" NRD:");
