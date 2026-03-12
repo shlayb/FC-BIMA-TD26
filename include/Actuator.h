@@ -29,6 +29,7 @@
 #define SERVO_RUD_L 6
 #define SERVO_AIL_R 12
 #define SERVO_RUD_R 14
+#define SERVO_PAYLOAD 11
 #define MOTOR_1_PIN 3  //FC pin 7
 #define MOTOR_2_PIN 5  //FC pin 8
 #define MOTOR_3_PIN 9  //FC pin 9
@@ -42,6 +43,7 @@ Servo elevator;
 Servo rudder_L;
 Servo rudder_R;
 Servo pusher;
+Servo payload;
 
 FW_FWBA fw_fbwa;
 
@@ -124,12 +126,14 @@ void init_actuator() {
     pinMode(MOTOR_2_PIN, OUTPUT);
     pinMode(MOTOR_3_PIN, OUTPUT);
     pinMode(MOTOR_4_PIN, OUTPUT);
+    pinMode(SERVO_PAYLOAD, OUTPUT);
 
     aileron_L.attach(SERVO_AIL_L);
     elevator.attach(SERVO_ELE);
     rudder_L.attach(SERVO_RUD_L);
     aileron_R.attach(SERVO_AIL_R);
     rudder_R.attach(SERVO_RUD_R);
+    payload.attach(SERVO_PAYLOAD);
     
     pusher.attach(THROTTLE);
 
@@ -143,6 +147,7 @@ void init_actuator() {
     motor3.writeMicroseconds(988);
     motor4.writeMicroseconds(988);
     pusher.writeMicroseconds(988);
+    payload.writeMicroseconds(1000); // default hold
 
     Serial.println("Actuator setup complete");
 }
@@ -157,6 +162,15 @@ void motor_loop(int pwm1, int pwm2, int pwm3, int pwm4) {
     // motor2.writeMicroseconds(ch_throttle);
     // motor3.writeMicroseconds(ch_throttle);
     // motor4.writeMicroseconds(ch_throttle);
+}
+
+void payload_loop() {
+    if(!arming){
+        payload.writeMicroseconds(1000); // hold
+    }
+    else{
+        payload.writeMicroseconds(servo_pwm_payload); // drop or hold based on mode switch
+    }
 }
 
 void copter_calcOutput(int16_t ch_thr)

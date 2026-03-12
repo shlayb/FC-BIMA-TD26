@@ -171,6 +171,8 @@ void controlThd(void *pvParameters){
     setup_mode();
     vTaskDelay(pdMS_TO_TICKS(CONTROL_time)); // Reduced delay for more frequent updates
   }
+
+  payload_loop();
     
 };
 

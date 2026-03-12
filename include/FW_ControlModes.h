@@ -20,6 +20,7 @@ uint16_t servo_pwm_ail_R;
 uint16_t servo_pwm_ele;
 uint16_t servo_pwm_rud_R;
 uint16_t servo_pwm_rud_L;
+uint16_t servo_pwm_payload;
 uint16_t motor_pwm;
 float cmdroll;
 float aerodynamic_load_factor = 1.0f; //ignore
@@ -56,6 +57,8 @@ void updateManual_FW()
     servo_pwm_rud_L = ch_yaw;
     servo_pwm_rud_R = ch_yaw;
     motor_pwm = ch_throttle;
+
+    update_manual_payload();
 }
 
 void updateFBWA_FW()
@@ -75,6 +78,8 @@ void updateFBWA_FW()
         nav_pitch_deg = -(pitch_input * PITCH_MIN);
     }
     nav_pitch_deg = constrain(nav_pitch_deg, PITCH_MIN, PITCH_MAX); //membatasi 
+
+    update_manual_payload();
 }
 
 /** calculate roll from navigation controller */
@@ -129,7 +134,16 @@ void update_load_factor(void)
         }
         nav_roll_deg = constrain(nav_roll_deg, -roll_limit, roll_limit);
         roll_limit_cd = MIN(roll_limit_cd, roll_limit);
-    }    
+    }
+}
+
+void update_manual_payload()
+{
+    if (ch_vehicle_mode > 1500) {
+        servo_pwm_payload = 2000; // payload drop
+    } else {
+        servo_pwm_payload = 1000; // payload hold
+    }
 }
 
 

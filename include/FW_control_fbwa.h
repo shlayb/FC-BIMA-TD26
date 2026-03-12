@@ -122,6 +122,7 @@ void FW_FWBA::getIntegral(int16_t ch_thr, float roll, float pitch, float yaw) {
     if (ch_thr < 1100) {
         roll_int = 0.0f;
         pitch_int = 0.0f;
-}}
+}
+}
 
 #endif
