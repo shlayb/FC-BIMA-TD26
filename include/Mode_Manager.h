@@ -23,6 +23,7 @@ void setup_mode(){
   nav_gps();
   modes.update();
 
+  // Keep payload release updated each control cycle
   
 
   if (is_transitioning){

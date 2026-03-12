@@ -58,7 +58,7 @@ void updateManual_FW()
     servo_pwm_rud_R = ch_yaw;
     motor_pwm = ch_throttle;
 
-    update_manual_payload();
+    // update_manual_payload();
 }
 
 void updateFBWA_FW()
@@ -79,7 +79,6 @@ void updateFBWA_FW()
     }
     nav_pitch_deg = constrain(nav_pitch_deg, PITCH_MIN, PITCH_MAX); //membatasi 
 
-    update_manual_payload();
 }
 
 /** calculate roll from navigation controller */
@@ -137,14 +136,14 @@ void update_load_factor(void)
     }
 }
 
-void update_manual_payload()
-{
-    if (ch_vehicle_mode > 1500) {
-        servo_pwm_payload = 2000; // payload drop
-    } else {
-        servo_pwm_payload = 1000; // payload hold
-    }
-}
+// void update_manual_payload()
+// {
+//     if (ch_vehicle_mode > 1500) {
+//         servo_pwm_payload = 2000; // payload drop
+//     } else {
+//         servo_pwm_payload = 1000; // payload hold
+//     }
+// }
 
 
 

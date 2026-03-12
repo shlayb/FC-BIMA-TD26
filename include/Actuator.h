@@ -148,6 +148,7 @@ void init_actuator() {
     motor4.writeMicroseconds(988);
     pusher.writeMicroseconds(988);
     payload.writeMicroseconds(1000); // default hold
+    servo_pwm_payload = 1000;        // make sure the variable is initialized
 
     Serial.println("Actuator setup complete");
 }
@@ -165,12 +166,22 @@ void motor_loop(int pwm1, int pwm2, int pwm3, int pwm4) {
 }
 
 void payload_loop() {
-    if(!arming){
-        payload.writeMicroseconds(1000); // hold
+    // Update payload release position based on a dedicated switch (ch_vehicle_mode)
+    // - ch_vehicle_mode > 1500: drop
+    // - ch_vehicle_mode <= 1500: hold
+    if (!arming) {
+        servo_pwm_payload = 1000; // safe position while disarmed
+    } else {
+        if (ch_vehicle_mode > 1500) {
+            servo_pwm_payload = 2000; // drop
+        } else {
+            servo_pwm_payload = 1000; // hold
+        }
     }
-    else{
-        payload.writeMicroseconds(servo_pwm_payload); // drop or hold based on mode switch
-    }
+
+    // Ensure the servo command is within a valid PWM range
+    servo_pwm_payload = constrain(servo_pwm_payload, 988, 2012);
+    payload.writeMicroseconds(servo_pwm_payload);
 }
 
 void copter_calcOutput(int16_t ch_thr)

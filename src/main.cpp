@@ -171,8 +171,6 @@ void controlThd(void *pvParameters){
     setup_mode();
     vTaskDelay(pdMS_TO_TICKS(CONTROL_time)); // Reduced delay for more frequent updates
   }
-
-  payload_loop();
     
 };
 
@@ -559,8 +557,8 @@ void setup() {
     loop_timer = micros();
 
     // xTaskCreate(Print_To_Raspi, "PrintRaspi", 4096, NULL, 3, &Task_Raspi);
-    xTaskCreate(Print_telem, "Telem", 2048, NULL, 2, &Task_Telem);
-    // xTaskCreate(mavlink_print, "Mavlink", 2048, NULL, 2, &Task_Mavlink);
+    // xTaskCreate(Print_telem, "Telem", 2048, NULL, 2, &Task_Telem);
+    xTaskCreate(mavlink_print, "Mavlink", 2048, NULL, 2, &Task_Mavlink);
     // xTaskCreate(Print_task, "Print", 4096, NULL, 3, &Task_Print);
     xTaskCreate(radio, "Radio", 4096, NULL, 3, &Task_Print);
     xTaskCreate(airspeed, "Airspeed", 4096, NULL, 2, &Task_Print);

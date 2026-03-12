@@ -103,6 +103,7 @@ protected:
     auto_navigation_mode = false;
     servos_out_manual();
     plane_motors_out();  // pusher.writeMicroseconds(988);
+    payload_loop();
     mode_phase = 1;
     current = ModeId::MANU;
   }
@@ -135,6 +136,7 @@ protected:
                           imu.gyro_y, imu.gyro_x, imu.gyro_z);
     fw_servos_out_fbwa();
     plane_motors_out();
+    payload_loop();
     mode_phase = 2;
     current = ModeId::FBWA;
   }
@@ -167,6 +169,7 @@ protected:
     update_alt();
     updateAuto_FW();
     stabilize();
+    payload_loop();
     servos_out_fbwa();
     plane_motors_out();
     mode_phase = 3;
