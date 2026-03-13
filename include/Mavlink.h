@@ -169,6 +169,16 @@ void MavlinkHandler::handleStatusText(const mavlink_message_t& msg) {
         return;  // Jangan process jika dari FC sendiri
     }
 
+    // Check for DROP command dari Raspberry Pi untuk trigger autopayload
+    if (strncmp(status.text, "DROP", 4) == 0) {
+        payload_drop_command = true;
+        char confirm_msg[50];
+        snprintf(confirm_msg, sizeof(confirm_msg), "PAYLOAD DROP TRIGGERED");
+        sendStatusText(MAV_SEVERITY_INFO, confirm_msg);
+        Serial.println("PAYLOAD DROP COMMAND RECEIVED from RPI via MAVLINK");
+        return;
+    }
+
     // Buat text echo back (tambah prefix untuk logging)
     char echo_text[50];
     snprintf(echo_text, sizeof(echo_text), "Echo: %s", status.text);

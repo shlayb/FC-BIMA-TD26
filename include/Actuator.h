@@ -24,14 +24,14 @@
 
 //PIN FC BARU
 #define SERVO_AIL_L 2  
-#define SERVO_ELE 4    
+#define SERVO_ELE 5    
 #define THROTTLE 10
-#define SERVO_RUD_L 6
+#define SERVO_RUD_L 4
 #define SERVO_AIL_R 12
-#define SERVO_RUD_R 14
+#define SERVO_RUD_R 6 //FC pin 2
 #define SERVO_PAYLOAD 11
-#define MOTOR_1_PIN 3  //FC pin 7
-#define MOTOR_2_PIN 5  //FC pin 8
+#define MOTOR_1_PIN 14  
+#define MOTOR_2_PIN 11 //FC pin 8
 #define MOTOR_3_PIN 9  //FC pin 9
 #define MOTOR_4_PIN 13 //FC pin 10
 //Pin belum dipake =>> mtr 11 = Pin 13
@@ -174,6 +174,29 @@ void payload_loop() {
     } else {
         if (ch_vehicle_mode > 1500) {
             servo_pwm_payload = 2000; // drop
+        } else {
+            servo_pwm_payload = 1000; // hold
+        }
+    }
+
+    // Ensure the servo command is within a valid PWM range
+    servo_pwm_payload = constrain(servo_pwm_payload, 988, 2012);
+    payload.writeMicroseconds(servo_pwm_payload);
+}
+
+// Auto payload loop - triggered by "DROP" message from Raspberry Pi via MAVLink
+void autopayload_loop() {
+    // Update payload release position based on MAVLink command from Raspberry Pi
+    // - payload_drop_command = true: drop payload
+    // - payload_drop_command = false: hold payload
+    if (!arming) {
+        servo_pwm_payload = 1000; // safe position while disarmed
+        payload_drop_command = false; // reset command jika disarmed
+    } else {
+        if (payload_drop_command) {
+            servo_pwm_payload = 2000; // drop
+            payload_drop_command = false; // reset command after triggering
+            Serial.println("AUTOPAYLOAD: Payload dropped via MAVLink command");
         } else {
             servo_pwm_payload = 1000; // hold
         }

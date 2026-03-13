@@ -3,6 +3,7 @@
 #include "AHRS.h"
 #include "Arduino.h"
 #include "Attitude.h"
+#include "Actuator.h"
 #include "ControlModes.h"
 #include "FW_config.h"
 #include "Navigation.h"
@@ -104,6 +105,7 @@ protected:
     servos_out_manual();
     plane_motors_out();  // pusher.writeMicroseconds(988);
     payload_loop();
+    autopayload_loop;
     mode_phase = 1;
     current = ModeId::MANU;
   }
@@ -137,6 +139,7 @@ protected:
     fw_servos_out_fbwa();
     plane_motors_out();
     payload_loop();
+    autopayload_loop;
     mode_phase = 2;
     current = ModeId::FBWA;
   }
@@ -170,6 +173,7 @@ protected:
     updateAuto_FW();
     stabilize();
     payload_loop();
+    autopayload_loop;
     servos_out_fbwa();
     plane_motors_out();
     mode_phase = 3;

@@ -23,6 +23,9 @@ uint16_t servo_pwm_rud_L;
 uint16_t servo_pwm_payload;
 uint16_t motor_pwm;
 float cmdroll;
+
+// Flag untuk autopayload trigger dari mavlink (pesan "DROP" dari Raspberry Pi)
+bool payload_drop_command = false;
 float aerodynamic_load_factor = 1.0f; //ignore
 
 /*
