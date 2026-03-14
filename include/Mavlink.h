@@ -175,7 +175,7 @@ void MavlinkHandler::handleStatusText(const mavlink_message_t& msg) {
         char confirm_msg[50];
         snprintf(confirm_msg, sizeof(confirm_msg), "PAYLOAD DROP TRIGGERED");
         sendStatusText(MAV_SEVERITY_INFO, confirm_msg);
-        Serial.println("PAYLOAD DROP COMMAND RECEIVED from RPI via MAVLINK");
+        // Serial.println("PAYLOAD DROP COMMAND RECEIVED from RPI via MAVLINK");
         return;
     }
 

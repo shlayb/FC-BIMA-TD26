@@ -29,10 +29,10 @@
 #define SERVO_RUD_L 4
 #define SERVO_AIL_R 12
 #define SERVO_RUD_R 6 //FC pin 2
-#define SERVO_PAYLOAD 11
+#define SERVO_PAYLOAD 9
 #define MOTOR_1_PIN 14  
-#define MOTOR_2_PIN 11 //FC pin 8
-#define MOTOR_3_PIN 9  //FC pin 9
+#define MOTOR_2_PIN 20 //FC pin 8
+#define MOTOR_3_PIN 33  //FC pin 9
 #define MOTOR_4_PIN 13 //FC pin 10
 //Pin belum dipake =>> mtr 11 = Pin 13
 
@@ -44,6 +44,11 @@ Servo rudder_L;
 Servo rudder_R;
 Servo pusher;
 Servo payload;
+
+// Payload drop timing variables
+uint32_t payload_drop_start_time = 0;  // Waktu mulai drop
+const uint32_t PAYLOAD_DROP_DURATION = 500; // Durasi drop dalam milliseconds (0.5 detik)
+bool payload_dropping = false;  // Flag untuk tracking status drop
 
 FW_FWBA fw_fbwa;
 
@@ -204,6 +209,58 @@ void autopayload_loop() {
 
     // Ensure the servo command is within a valid PWM range
     servo_pwm_payload = constrain(servo_pwm_payload, 988, 2012);
+    payload.writeMicroseconds(servo_pwm_payload);
+}
+
+// ============================================================================
+// UNIFIED PAYLOAD CONTROL - Menggabungkan manual dan auto tanpa konflik
+// ============================================================================
+// Dengan delay untuk memastikan servo sempat memegang posisi drop
+void payload_control_unified() {
+    uint32_t current_time = millis();
+    
+    if (!arming) {
+        // Saat disarmed, set ke posisi aman
+        servo_pwm_payload = 1000; // safe position while disarmed
+        payload_drop_command = false; // reset command jika disarmed
+        payload_dropping = false;
+        payload_drop_start_time = 0;
+    } else {
+        // Prioritas 1: Cek perintah AUTO dari Raspberry Pi (MAVLink)
+        if (payload_drop_command) {
+            // Mulai proses drop
+            if (!payload_dropping) {
+                payload_dropping = true;
+                payload_drop_start_time = current_time;
+                servo_pwm_payload = 2000; // drop
+                // Serial.println("[PAYLOAD] AUTO DROP initiated via MAVLink");
+            }
+            
+            // Cek apakah durasi drop sudah selesai
+            if (current_time - payload_drop_start_time >= PAYLOAD_DROP_DURATION) {
+                payload_drop_command = false; // reset command setelah delay
+                payload_dropping = false;
+                // Serial.println("[PAYLOAD] AUTO DROP completed");
+            } else {
+                // Masih dalam proses drop, pertahankan posisi 2000
+                servo_pwm_payload = 2000;
+            }
+        } 
+        // Prioritas 2: Gunakan kontrol MANUAL dari remote jika tidak ada auto command
+        else if (ch_vehicle_mode > 1500) {
+            servo_pwm_payload = 2000; // drop
+            payload_dropping = false;  // reset flag untuk auto
+            // Serial.println("[PAYLOAD] MANUAL DROP via Remote");
+        } else {
+            servo_pwm_payload = 1000; // hold
+            payload_dropping = false;  // reset flag untuk auto
+        }
+    }
+
+    // Pastikan command berada dalam range PWM yang valid
+    servo_pwm_payload = constrain(servo_pwm_payload, 988, 2012);
+    
+    // WRITE KE SERVO HANYA SEKALI (bukan dua kali seperti sebelumnya)
     payload.writeMicroseconds(servo_pwm_payload);
 }
 
