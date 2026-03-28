@@ -6,6 +6,7 @@
 #include "AHRS.h"
 #include "Radio.h"
 #include "gps.h"
+#include "airspeed.h"  // Untuk akses airspeed sensor data
 #include "Mode_setup.h"
 #include "Auto_setup.h"  // Untuk akses auto_state struct
 #include "Voltage.h"  // Untuk battery voltage dan percentage
@@ -17,6 +18,7 @@
 // Declare external global waypoint data from AutoMode.h
 extern Locations waypoint[100];
 extern int wp_sum;
+extern Airspeed arspd;  // Airspeed sensor object untuk akses v_ms, v_kmh
 
 // Mission state enum
 enum MissionState {
@@ -87,10 +89,11 @@ private:
     void sendAlert(const char* txt);
     void sendAltitude(float altitude);
     void sendAttitude(float roll_rad, float pitch_rad, float yaw_rad);
-    void sendGpsRawInt(uint8_t fix_type, int32_t lat, int32_t lon, uint16_t eph, uint16_t vel, uint8_t satellites_visible);
+    void sendGpsRawInt(uint8_t fix_type, int32_t lat, int32_t lon, uint16_t eph, uint16_t vel, uint16_t cog, uint8_t satellites_visible);
     void sendMissionItemReached(uint16_t seq);
     void sendBatteryStatus(float voltage, int16_t current_amp, int8_t battery_remaining);
     void sendNavControllerOutput(float nav_roll, float nav_pitch, float nav_bearing, float target_bearing, float wp_dist, float alt_error, float aspd_error, float xtrack_error);
+    void sendVfrHud(float airspeed, float groundspeed, float heading, float altitude, float climb_rate);
     uint8_t getBaseMode() const;
     uint32_t getCustomMode() const;
 
@@ -735,10 +738,11 @@ void MavlinkHandler::sendAttitude(float roll_rad, float pitch_rad, float yaw_rad
 }
 
 // Send GPS_RAW_INT
-void MavlinkHandler::sendGpsRawInt(uint8_t fix_type, int32_t lat, int32_t lon, uint16_t eph, uint16_t vel, uint8_t satellites_visible) {
+void MavlinkHandler::sendGpsRawInt(uint8_t fix_type, int32_t lat, int32_t lon, uint16_t eph, uint16_t vel, uint16_t cog, uint8_t satellites_visible) {
     mavlink_message_t msg;
     uint64_t t_usec = (uint64_t)getMillis() * 1000ULL;
-    mavlink_msg_gps_raw_int_pack(SYSTEM_ID, COMPONENT_ID, &msg, t_usec, fix_type, lat, lon, 0, eph, 0, vel, 0, satellites_visible, 0, 0, 0, 0, 0);
+    
+    mavlink_msg_gps_raw_int_pack(SYSTEM_ID, COMPONENT_ID, &msg, t_usec, fix_type, lat, lon, 0, eph, 0, vel, cog, satellites_visible, 0, 0, 0, 0, 0);
     mavSendAll(msg);
 }
 
@@ -797,6 +801,24 @@ void MavlinkHandler::sendMissionItemReached(uint16_t seq) {
     Serial.printf("WP %d reached\n", seq);
 }
 
+// Send VFR_HUD - untuk menampilkan airspeed, groundspeed, heading, altitude, climb_rate di GCS
+void MavlinkHandler::sendVfrHud(float airspeed, float groundspeed, float heading, float altitude, float climb_rate) {
+    mavlink_message_t msg;
+    // airspeed in m/s, groundspeed in m/s, heading in degrees (0-360), altitude in m, climb_rate in m/s
+    mavlink_msg_vfr_hud_pack(
+        SYSTEM_ID,
+        COMPONENT_ID,
+        &msg,
+        airspeed,       // airspeed (m/s) ← dari arspd.v_ms
+        groundspeed,    // groundspeed (m/s) ← dari GPS speed
+        heading,        // heading (0-360 degrees) ← dari IMU yaw
+        0,              // throttle (0-100), -1 if unknown
+        altitude,       // altitude (m)
+        climb_rate      // climb_rate (m/s)
+    );
+    mavSendAll(msg);
+}
+
 // Public method: notify when waypoint reached
 void MavlinkHandler::notifyWaypointReached(uint16_t seq) {
     sendMissionItemReached(seq);
@@ -850,8 +872,13 @@ void MavlinkHandler::mavlinkTask() {
 
     if (now - lastGps >= GPS_MS) {
         lastGps = now;
+        uint16_t cog_centi_deg = 65535; 
+        if (gepees.getStatus() >= 2) { 
+            cog_centi_deg = (uint16_t)(gepees.getCourse() * 100.0f); 
+        }
+
         sendGpsRawInt(gepees.getStatus(), (int32_t)(gepees.latitude * 1e7), (int32_t)(gepees.longitude * 1e7),
-                      (uint16_t)(gepees.hdop * 100), (uint16_t)(gepees.speed_mps * 100), gepees.satellites);
+                      (uint16_t)(gepees.hdop * 100), (uint16_t)(gepees.speed_mps * 100), imu.heading, gepees.satellites);
     }
 
     if (now - lastAtt >= ATT_MS) {
@@ -888,6 +915,18 @@ void MavlinkHandler::mavlinkTask() {
         float xtrack_error = 0;             // TODO: crosstrack error from L1 controller
         
         sendNavControllerOutput(nav_roll, nav_pitch, nav_bearing, target_bearing, wp_dist, alt_error, aspd_error, xtrack_error);
+    }
+
+    if (now - lastVfr >= VFR_MS) {
+        lastVfr = now;
+        // Send VFR_HUD untuk menampilkan airspeed di GCS
+        float airspeed = arspd.v_ms;  // Airspeed dari sensor MS4525D (m/s)
+        float groundspeed = gepees.speed_mps;  // Groundspeed dari GPS (m/s)
+        float heading = (imu.yaw < 0) ? imu.yaw + 360 : imu.yaw;  // Heading dalam degrees (0-360)
+        float altitude = baro.altitude;  // Altitude dari barometer (m)
+        float climb_rate = 0;  // TODO: climb rate dari barometer atau IMU (m/s)
+        
+        sendVfrHud(airspeed, groundspeed, heading, altitude, climb_rate);
     }
    
     // if (millis() - lastCustom >= 5000) {
