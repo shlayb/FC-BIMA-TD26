@@ -1,11 +1,11 @@
 #pragma once
 #include "Actuator.h"
 #include "Auto_setup.h"
-#include "mode_setup.h"
+#include "Mode_setup.h"
 // #include "Radio.h"
 #include "TECS.h"
 #include "bno055.h"
-#include "Copter_control.h"
+#include "Copter_Control.h"
 
 class ModeCopter_STB : public ModeBase {
 public:

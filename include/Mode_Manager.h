@@ -1,8 +1,8 @@
 #pragma once
 #include "Arduino.h"
 #include "AHRS.h"
-#include "radio.h"
-#include "mode_setup.h"
+#include "Radio.h"
+#include "Mode_setup.h"
 #include "Mode_Flywing.h"
 #include "Mode_Copter.h"
 #include "Mode_Fixedwing.h"

@@ -206,16 +206,11 @@ void autopayload_loop() {
             servo_pwm_payload = 1000; // hold
         }
     }
-
-    // Ensure the servo command is within a valid PWM range
     servo_pwm_payload = constrain(servo_pwm_payload, 988, 2012);
     payload.writeMicroseconds(servo_pwm_payload);
 }
 
-// ============================================================================
-// UNIFIED PAYLOAD CONTROL - Menggabungkan manual dan auto tanpa konflik
-// ============================================================================
-// Dengan delay untuk memastikan servo sempat memegang posisi drop
+// UNIFIED PAYLOAD CONTROL - manual and auto 
 void payload_control_unified() {
     uint32_t current_time = millis();
     

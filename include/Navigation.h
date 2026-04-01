@@ -5,7 +5,7 @@
 #include "TECS.h"
 #include "L1_Controller.h"
 #include "Actuator.h"
-#include "mode_setup.h"
+#include "Mode_setup.h"
 #include "Navigation.h"
 #include "FW_ControlModes.h"
 #include "Fuzzy_FW_Roll.h"

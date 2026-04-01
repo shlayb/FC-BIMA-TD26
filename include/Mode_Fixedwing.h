@@ -13,7 +13,7 @@
 #include "takeoff.h"
 #include "bno055.h"
 #include "buzzer.h"
-#include "mode_setup.h"
+#include "Mode_setup.h"
 
 void exit_auto(){
     // Serial2.println("EXIT AUTO MODE");

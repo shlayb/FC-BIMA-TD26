@@ -8,8 +8,8 @@
 #include "Voltage.h"
 #include "flywing_control.h"
 #include "TimingUtils.h"
-#include "mode_setup.h"
-#include "fuzzy_fw_roll.h"
+#include "Mode_setup.h"
+#include "Fuzzy_FW_Roll.h"
 #include "Mode_Transisi.h"
 
 // #include <Scheduler/scheduler.h>

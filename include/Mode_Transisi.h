@@ -1,11 +1,11 @@
 #pragma once
 #include "Arduino.h"
-#include "radio.h"
-#include "mode_setup.h"
+#include "Radio.h"
+#include "Mode_setup.h"
 #include "Attitude.h"
 #include "Actuator.h"
-#include "Flywing_Control.h"
-#include "copter_control.h"
+#include "flywing_control.h"
+#include "Copter_Control.h"
 
 // ================== MIXER PUSHER & QUAD ==================
 int16_t PUSHER_PWM_MIN = 988;   // idle/off

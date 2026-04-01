@@ -3,11 +3,11 @@
 #include "Actuator.h"
 #include "Auto_setup.h"
 #include "Attitude.h"
-#include "mode_setup.h"
+#include "Mode_setup.h"
 // #include "Radio.h"
 #include "FW_ControlModes.h"
 #include "Fuzzy_FW_Roll.h"
-#include "Flywing_Control.h"
+#include "flywing_control.h"
 #include "TECS.h"
 #include "Navigation.h"
 
