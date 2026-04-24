@@ -103,10 +103,19 @@ protected:
     mode_fbwa_plane = false;
     auto_navigation_mode = false;
     servos_out_manual();
-    plane_motors_out();  // pusher.writeMicroseconds(988);
+    // plane_motors_out();  // pusher.writeMicroseconds(988);
+    dual_motor_throttle_out(ch_throttle);  // Kontrol throttle langsung ke motor (tanpa yaw diff)
     payload_control_unified();  // Unified payload control (manual + auto)
     mode_phase = 1;
     current = ModeId::MANU;
+    Serial.print("ch_roll:");
+    Serial.print(ch_roll);
+    Serial.print(" |ch_pitch:");
+    Serial.print(ch_pitch);
+    Serial.print(" |ch_thr:");
+    Serial.print(ch_throttle);
+    Serial.print(" |ch_yaw:");
+    Serial.print(ch_yaw);
   }
 
   void _exit() override {

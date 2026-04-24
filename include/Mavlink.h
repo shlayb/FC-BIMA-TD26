@@ -268,6 +268,13 @@ void MavlinkHandler::applyRcToGlobals(uint16_t c1, uint16_t c2, uint16_t c3,
     arming = ch5 > 1500 ? 1 : 0; // Contoh: channel 5 sebagai switch arming
     apply(ch_mode,         c6);
     apply(ch_mode_backup,         c7);
+    if (ch_mode_backup <= 1000) {
+        mode_now = 1;
+    } else if (ch_mode_backup > 1000 && ch_mode_backup <= 1512) {
+        mode_now = 2;
+    } else {
+        mode_now = 3;
+    }
     apply(ch_vehicle_mode,         c8);
 
     g_rcStatus.valid        = true;

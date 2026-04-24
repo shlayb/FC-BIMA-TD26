@@ -22,7 +22,7 @@
 #define SERIAL_USB Serial
 #define SERIAL_UART Serial2
 #define SERIAL_RASPI Serial7
-#define CALIBRATE_MOTORS false
+#define CALIBRATE_MOTORS true
 // pilih salah satu: 1 = fixedwing, 0 = flywing
 #define MODEL_UAV_FIXEDWING 1
 
@@ -67,6 +67,11 @@ TaskHandle_t Task_Mavlink;
 TaskHandle_t Task_Buzzer;
 TaskHandle_t Task_Control;
 TaskHandle_t Task_Voltage;
+
+DMAMEM static uint8_t dma_rx2[4096];
+DMAMEM static uint8_t dma_tx2[4096];
+DMAMEM static uint8_t dma_rx7[2048];
+DMAMEM static uint8_t dma_tx7[4096]; 
 
 int line = 0;
 int milisawal = 0;
@@ -128,7 +133,7 @@ void mavlink_print(void *pvParameters){
         mavHandler.mavlinkTask();
         vTaskDelay(pdMS_TO_TICKS(MAVLINK_time)); // Reduced delay for more frequent updates
     }
-};
+};  
 
 void airspeed(void *pvParameters){
     for(;;){
@@ -154,19 +159,9 @@ void voltage(void *pvParameters){
 void controlThd(void *pvParameters){
     // pilih model yang ingin dipakai
     // Fixedwing
-    #if MODEL_UAV_FIXEDWING
     modes.registerMode(&mMANU_FW);
     modes.registerMode(&mFBWA_FW);
     modes.registerMode(&mAUTO_FW);
-    // Flywing
-    #else
-    modes.registerMode(&mMANU);
-    modes.registerMode(&mFBWA);
-    modes.registerMode(&mAUTO);
-    #endif
-    // Qopter
-    modes.registerMode(&mQHOV);
-    modes.registerMode(&mCOPT);
     for(;;){
     setup_mode();
     vTaskDelay(pdMS_TO_TICKS(CONTROL_time)); // Reduced delay for more frequent updates
@@ -257,24 +252,24 @@ void printUSB() {
     // Serial.print(cek_alpha_hover);
     // Serial.print(" |ch_thr:");
     // Serial.print(ch_throttle);
-    Serial.print(" |hdop:");
-    Serial.print(gepees.hdop);
-    Serial.print(" |sat:");
-    Serial.print(gepees.satellites);
-    Serial.print(" |gspd:");
-    Serial.print(ahrs.groundspeed);
-    Serial.print(" |head:");
-    Serial.print(imu.heading);
-    Serial.print(" |alt = ");
-    Serial.print(baro.altitude);
-    // Serial.print(" |ch_roll:");
-    // Serial.print(ch_roll);
-    // Serial.print(" |ch_pitch:");
-    // Serial.print(ch_pitch);
-    // Serial.print(" |ch_thr:");
-    // Serial.print(ch_throttle);
-    // Serial.print(" |ch_yaw:");
-    // Serial.print(ch_yaw);
+    // Serial.print(" |hdop:");
+    // Serial.print(gepees.hdop);
+    // Serial.print(" |sat:");
+    // Serial.print(gepees.satellites);
+    // Serial.print(" |gspd:");
+    // Serial.print(ahrs.groundspeed);
+    // Serial.print(" |head:");
+    // Serial.print(imu.heading);
+    // Serial.print(" |alt = ");
+    // Serial.print(baro.altitude);
+    Serial.print(" |ch_roll:");
+    Serial.print(ch_roll);
+    Serial.print(" |ch_pitch:");
+    Serial.print(ch_pitch);
+    Serial.print(" |ch_thr:");
+    Serial.print(ch_throttle);
+    Serial.print(" |ch_yaw:");
+    Serial.print(ch_yaw);
     // Serial.print(" MHOV: ");
     // Serial.print(QUAD_PWM_THR);
     // Serial.print (" mp:");
@@ -454,9 +449,11 @@ void printUSB() {
 }
 
 void calibrateMotor() {
-    pusher.writeMicroseconds(2000);
+    mtr_1.writeMicroseconds(2000);  // Motor kanan
+    mtr_2.writeMicroseconds(2000);  // Motor kiri
     delay(3000);
-    pusher.writeMicroseconds(1000);
+    mtr_1.writeMicroseconds(1000);
+    mtr_2.writeMicroseconds(1000);
     delay(1000);
 }
 
@@ -519,8 +516,12 @@ void setup() {
     current    = ModeId::MANU;
     
     SERIAL_USB.begin(115200);
-    SERIAL_UART.begin(57600);
+    SERIAL_UART.begin(460800);
+    SERIAL_UART.addMemoryForRead(dma_rx2, sizeof(dma_rx2));
+    SERIAL_UART.addMemoryForWrite(dma_tx2, sizeof(dma_tx2));
     SERIAL_RASPI.begin(57600); //harus sama mengirim barudrate nya
+    SERIAL_RASPI.addMemoryForRead(dma_rx7, sizeof(dma_rx7));
+    SERIAL_RASPI.addMemoryForWrite(dma_tx7, sizeof(dma_tx7));
     
     delay(100);  // Wait for serial init
     
@@ -558,17 +559,17 @@ void setup() {
 
     // xTaskCreate(Print_To_Raspi, "PrintRaspi", 4096, NULL, 3, &Task_Raspi);
     // xTaskCreate(Print_telem, "Telem", 2048, NULL, 2, &Task_Telem);
-    xTaskCreate(mavlink_print, "Mavlink", 2048, NULL, 2, &Task_Mavlink);
     // xTaskCreate(Print_task, "Print", 4096, NULL, 3, &Task_Print);
-    xTaskCreate(radio, "Radio", 4096, NULL, 3, &Task_Print);
-    xTaskCreate(airspeed, "Airspeed", 4096, NULL, 2, &Task_Print);
-    xTaskCreate(controlThd, "Control", 4096, NULL, 2, &Task_Control);
-    xTaskCreate(fwRoll, "FWRoll", 4096, NULL, 3, &Task_Print);
-    xTaskCreate(updateIMU, "IMU", 2048, NULL, 3, &Task_IMU);
-    xTaskCreate(GPS, "GPS", 2048, NULL, 3, &Task_GPS);
-    xTaskCreate(updateBARO, "BARO", 2048, NULL, 3, &Task_BARO);
-    xTaskCreate(buzzerTask, "Buzzer", 2048, NULL, 3, &Task_Buzzer);
-    xTaskCreate(voltage, "Voltage", 2048, NULL, 2, &Task_Voltage);
+    xTaskCreate(mavlink_print, "Mavlink", 4096, NULL, 5, &Task_Mavlink); // ← tertinggi
+    xTaskCreate(updateIMU,     "IMU",     2048, NULL, 4, &Task_IMU);
+    xTaskCreate(GPS,           "GPS",     2048, NULL, 4, &Task_GPS);
+    xTaskCreate(controlThd,    "Control", 4096, NULL, 5, &Task_Control);
+    xTaskCreate(fwRoll,        "FWRoll",  4096, NULL, 3, &Task_Print);
+    xTaskCreate(radio,         "Radio",   4096, NULL, 3, &Task_Print);
+    xTaskCreate(updateBARO,    "BARO",    2048, NULL, 2, &Task_BARO);
+    xTaskCreate(airspeed,      "Airspeed",4096, NULL, 2, &Task_Print);
+    xTaskCreate(buzzerTask,    "Buzzer",  2048, NULL, 2, &Task_Buzzer);
+    xTaskCreate(voltage,       "Voltage", 2048, NULL, 1, &Task_Voltage);
     vTaskStartScheduler(); // Start FreeRTOS scheduler
 }
 
