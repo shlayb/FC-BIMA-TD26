@@ -23,7 +23,7 @@
 // #define MOTOR_4_PIN  14
 
 //PIN FC BARU
-#define SERVO_AIL_L 13  //MTR 11
+#define SERVO_AIL_L 5  //MTR 11
 #define SERVO_ELE 11    //MTR 10
 //#define THROTTLE 1  //MTR  (Tidak dipakai)
 #define SERVO_RUD_L 3 //MTR 7
@@ -35,8 +35,8 @@
 #define MOTOR_3_PIN 33  //FC pin 9 (Tidak dipakai)
 #define MOTOR_4_PIN 13 //FC pin 10 (Tidak dipakai)
 
-#define MTR_1_PIN 8  // MTR 9 (Throttle Kanan)
-#define MTR_2_PIN 5 //MTR 8  (Throttle Kiri)
+#define MTR_1_PIN 9  // MTR 9 (Throttle Kanan)
+#define MTR_2_PIN 13 //MTR 8  (Throttle Kiri)
 //Pin belum dipake =>> mtr 11 = Pin 13
 
 Servo motor1, motor2, motor3, motor4;

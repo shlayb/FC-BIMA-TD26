@@ -22,7 +22,7 @@
 #define SERIAL_USB Serial
 #define SERIAL_UART Serial2
 #define SERIAL_RASPI Serial7
-#define CALIBRATE_MOTORS true
+#define CALIBRATE_MOTORS false
 // pilih salah satu: 1 = fixedwing, 0 = flywing
 #define MODEL_UAV_FIXEDWING 1
 
