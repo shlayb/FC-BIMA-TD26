@@ -454,9 +454,11 @@ void printUSB() {
 }
 
 void calibrateMotor() {
-    pusher.writeMicroseconds(2000);
+    mtr_1.writeMicroseconds(2000);  // Motor kanan
+    mtr_2.writeMicroseconds(2000);  // Motor kiri
     delay(3000);
-    pusher.writeMicroseconds(1000);
+    mtr_1.writeMicroseconds(1000);
+    mtr_2.writeMicroseconds(1000);
     delay(1000);
 }
 

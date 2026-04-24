@@ -23,17 +23,20 @@
 // #define MOTOR_4_PIN  14
 
 //PIN FC BARU
-#define SERVO_AIL_L 2  //MTR 1
-#define SERVO_ELE 5    //MTR 8
-#define THROTTLE 10  //MTR 4
-#define SERVO_RUD_L 4 //MTR 2
-#define SERVO_AIL_R 12 //MTR 5
+#define SERVO_AIL_L 13  //MTR 11
+#define SERVO_ELE 11    //MTR 10
+//#define THROTTLE 1  //MTR  (Tidak dipakai)
+#define SERVO_RUD_L 3 //MTR 7
+#define SERVO_AIL_R 14 //MTR 6
 #define SERVO_RUD_R 6 //MTR 3
-#define SERVO_PAYLOAD 9 //MTR 9
-#define MOTOR_1_PIN 14  
-#define MOTOR_2_PIN 20 //FC pin 8
-#define MOTOR_3_PIN 33  //FC pin 9
-#define MOTOR_4_PIN 13 //FC pin 10
+#define SERVO_PAYLOAD 12 //MTR 5
+#define MOTOR_1_PIN 31  //MTR 4  (Tidak dipakai)
+#define MOTOR_2_PIN 32 //FC pin DICEK LAGI (Tidak dipakai)
+#define MOTOR_3_PIN 33  //FC pin 9 (Tidak dipakai)
+#define MOTOR_4_PIN 13 //FC pin 10 (Tidak dipakai)
+
+#define MTR_1_PIN 9  // MTR 9 (Throttle Kanan)
+#define MTR_2_PIN 5 //MTR 8  (Throttle Kiri)
 //Pin belum dipake =>> mtr 11 = Pin 13
 
 Servo motor1, motor2, motor3, motor4;
@@ -44,12 +47,17 @@ Servo rudder_L;
 Servo rudder_R;
 Servo pusher;
 Servo payload;
+Servo mtr_1; 
+Servo mtr_2; 
+
+// Forward declaration untuk dual motor throttle
+void dual_motor_throttle_out(int pwm_throttle);
+void dual_motor_throttle_out_yaw(int pwm_base, float yaw_diff);
 
 // Payload drop timing variables
 uint32_t payload_drop_start_time = 0;  // Waktu mulai drop
 const uint32_t PAYLOAD_DROP_DURATION = 500; // Durasi drop dalam milliseconds (0.5 detik)
 bool payload_dropping = false;  // Flag untuk tracking status drop
-
 FW_FWBA fw_fbwa;
 
 float u_roll, u_pitch, u_yaw, u_yaw_cmd;
@@ -126,12 +134,14 @@ void init_actuator() {
     pinMode(SERVO_RUD_L, OUTPUT);
     pinMode(SERVO_AIL_R, OUTPUT);
     pinMode(SERVO_RUD_R, OUTPUT);
-    pinMode(THROTTLE, OUTPUT);
+    //pinMode(THROTTLE, OUTPUT);
     pinMode(MOTOR_1_PIN, OUTPUT);
     pinMode(MOTOR_2_PIN, OUTPUT);
     pinMode(MOTOR_3_PIN, OUTPUT);
     pinMode(MOTOR_4_PIN, OUTPUT);
     pinMode(SERVO_PAYLOAD, OUTPUT);
+    pinMode(MTR_1_PIN, OUTPUT);
+    pinMode(MTR_2_PIN, OUTPUT);
 
     aileron_L.attach(SERVO_AIL_L);
     elevator.attach(SERVO_ELE);
@@ -139,9 +149,9 @@ void init_actuator() {
     aileron_R.attach(SERVO_AIL_R);
     rudder_R.attach(SERVO_RUD_R);
     payload.attach(SERVO_PAYLOAD);
-    
-    pusher.attach(THROTTLE);
-
+    //pusher.attach(THROTTLE);
+    mtr_1.attach(MTR_1_PIN);
+    mtr_2.attach(MTR_2_PIN);
     motor1.attach(MOTOR_1_PIN);
     motor2.attach(MOTOR_2_PIN);
     motor3.attach(MOTOR_3_PIN);
@@ -151,7 +161,9 @@ void init_actuator() {
     motor2.writeMicroseconds(988);
     motor3.writeMicroseconds(988);
     motor4.writeMicroseconds(988);
-    pusher.writeMicroseconds(988);
+    // pusher.writeMicroseconds(988);
+    mtr_1.writeMicroseconds(988);
+    mtr_2.writeMicroseconds(988);
     payload.writeMicroseconds(1000); // default hold
     servo_pwm_payload = 1000;        // make sure the variable is initialized
 
@@ -485,39 +497,57 @@ float PercenttoPWM(float Percent){
 
 void plane_motors_out() {
     motor_pwm = ch_throttle;
-    if (mode_fbwa_plane) {                                                     // mode_fbwa
-        motor_pwm = constrain(motor_pwm, MIN_THROTTLE_PWM, MAX_THROTTLE_PWM);  // pwmnya gabisa maks 100 persen krn diatur sesuai min dan max throttle
+    if (mode_fbwa_plane) {
+        motor_pwm = constrain(motor_pwm, MIN_THROTTLE_PWM, MAX_THROTTLE_PWM);
     }
+
+     float yaw_diff = (ch_yaw - 1500) * 0.3f;  // Gain bisa di-tune (0.3f)
+    dual_motor_throttle_out_yaw(motor_pwm, yaw_diff);
+}
+
+void dual_motor_throttle_out(int pwm_throttle) {
+    pwm_throttle = constrain(pwm_throttle, 988, 2012);
     if (arming) {
-        pusher.writeMicroseconds(motor_pwm);  // ch_throttle (jgn pake ini dulu)
-    } else if (!arming) {
-        pusher.writeMicroseconds(988);
+        mtr_1.writeMicroseconds(pwm_throttle);  // Kanan
+        mtr_2.writeMicroseconds(pwm_throttle);  // Kiri (thrust sama)
+    } else {
+        mtr_1.writeMicroseconds(988);
+        mtr_2.writeMicroseconds(988);
     }
 }
 
+// Jika ingin kontrol yaw via thrust differential:
+void dual_motor_throttle_out_yaw(int pwm_base, float yaw_diff) {
+    int pwm_right = constrain(pwm_base + yaw_diff, 988, 2012);
+    int pwm_left = constrain(pwm_base - yaw_diff, 988, 2012);
+    
+    if (arming) {
+        mtr_1.writeMicroseconds(pwm_right);  // Kanan
+        mtr_2.writeMicroseconds(pwm_left);   // Kiri
+    } else {
+        mtr_1.writeMicroseconds(988);
+        mtr_2.writeMicroseconds(988);
+    }
+}
 void plane_motors_out_auto(float pwm) {
     motor_pwm = pwm;
     motor_pwm = constrain(motor_pwm, MIN_THROTTLE_PWM, MAX_THROTTLE_PWM);
-    if (arming) {
-        pusher.writeMicroseconds(motor_pwm);
-    } else if (!arming) {
-        pusher.writeMicroseconds(988);
-    }
+    float yaw_diff = u_yaw_cmd * 100.0f;
+    dual_motor_throttle_out_yaw(motor_pwm, yaw_diff);
 }
 
 int32_t commanded_throttle; 
 /** calc throttle  */
-void calc_throttle()
-{
-    /** check if throttle is disabled */
+void calc_throttle() {
     commanded_throttle = PercenttoPWM(get_throttle_demand());
     commanded_throttle = scaleToPercent_reversed(commanded_throttle);
     commanded_throttle = constrain(commanded_throttle, MIN_THROTTLE_PWM, MAX_THROTTLE_PWM);
-    if (arming) {
-        pusher.writeMicroseconds(commanded_throttle);
-    } else if (!arming) {
-        pusher.writeMicroseconds(988);
-    }
+    
+    //dual_motor_throttle_out(commanded_throttle);  
+    // Ganti dari pusher.writeMicroseconds()
+    // Yaw differential dari autopilot
+    float yaw_diff = u_yaw_cmd * 100.0f;
+    dual_motor_throttle_out_yaw(commanded_throttle, yaw_diff);
 }
 
 void flywing_calcout()
@@ -534,21 +564,21 @@ void flywing_servos_out(int pwm_L, int pwm_R){
     aileron_R.writeMicroseconds(pwm_R + basePWM);
 
     // // Throttle + yaw untuk motor kanan & kiri
-    // float throttle_pwm = ch_throttle;
-    // // float yaw_diff = ch_yaw * 0.5f;
-    // float yaw_diff = ((ch_yaw - 1500) * 0.5f); // untuk yaw di 1500 (0) di tengah
-    // m1_pwm = constrain(throttle_pwm - yaw_diff, PWM_MIN, PWM_MAX);
-    // m3_pwm = constrain(throttle_pwm + yaw_diff, PWM_MIN, PWM_MAX);
+    float throttle_pwm = ch_throttle;
+    // float yaw_diff = ch_yaw * 0.5f;
+    float yaw_diff = ((ch_yaw - 1500) * 0.5f); // untuk yaw di 1500 (0) di tengah
+    m1_pwm = constrain(throttle_pwm - yaw_diff, PWM_MIN, PWM_MAX);
+    m2_pwm = constrain(throttle_pwm + yaw_diff, PWM_MIN, PWM_MAX);
 
-    // // Matikan motor depan & belakang
+    // Matikan motor depan & belakang
     // m2_pwm = 988;
     // m4_pwm = 988;
 
-    // if (arming) {
-    //     motor_loop(m1_pwm, m2_pwm, m3_pwm, m4_pwm);
-    // } else {
-    //     motor_loop(988, 988, 988, 988);
-    // }
+    if (arming) {
+        motor_loop(m1_pwm, m2_pwm, m3_pwm, m4_pwm);
+    } else {
+        motor_loop(988, 988, 988, 988);
+    }
 }
 
 void motorCopterOff(int pwm1, int pwm2, int pwm3, int pwm4) {
