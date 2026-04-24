@@ -9,7 +9,7 @@ bfs::SbusRx sbus_rx(&Serial8);
 bfs::SbusData data;
 
 bool signal_lost = false;
-int16_t ch_roll, ch_pitch, ch_throttle, ch_yaw, ch_mode, ch_mode_backup, ch_vehicle_mode;
+uint16_t ch_roll, ch_pitch, ch_throttle, ch_yaw, ch_mode, ch_mode_backup, ch_vehicle_mode, ch5, ch6, ch7, ch8;
 bool arming;
 
 // enum MODE

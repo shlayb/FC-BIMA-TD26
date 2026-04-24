@@ -35,9 +35,6 @@
 #include "bno055.h"
 #include "gps.h"
 
-
-
-
 Gepees gepees(0, 1, 38400);
 Airspeed arspd;
 IMU imu;
@@ -122,7 +119,7 @@ AHRS::AHRS()
       windspeed(),
       windspeed_x(0.0f),
       last_airspeed(0.0f) {}
-
+      
 bool AHRS::haveGPS() const {
     return gepees.gps_status > GPS_NO_FIX;
 }
@@ -224,7 +221,7 @@ void AHRS::driftCorrection() {
     bool is_gps_fix = gepees.age > 0 && gepees.age < 3000;
 
     if (is_gps_fix || gepees.gps_status >= GPS_FIX_3D || gepees.gps.speed.isUpdated()) {
-        groundspeed = gepees.speed_mps * 1000;  // ini dicek lagi, kalau terbang jangan (* 1000)
+        groundspeed = gepees.speed_mps;  // ini dicek lagi, kalau terbang jangan (* 1000)
         velocity_vector = gepees.velocity;
         is_gps_lock = true;
     } else if (haveGPS()) {
@@ -351,7 +348,7 @@ void AHRS::get_relative_position_D_home(float &posD) const {
 
 void AHRS::init_ahrs() {
     imu.init_imu();
-    gepees.initGPS();
+    // gepees.initGPS();
     arspd.initAirspeed();
     baro.init_baro();
 }
