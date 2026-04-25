@@ -104,18 +104,18 @@ protected:
     auto_navigation_mode = false;
     servos_out_manual();
     // plane_motors_out();  // pusher.writeMicroseconds(988);
-    dual_motor_throttle_out(ch_throttle);  // Kontrol throttle langsung ke motor (tanpa yaw diff)
+    dual_motor_throttle_out_yaw();  // Kontrol throttle langsung ke motor (tanpa yaw diff)
     payload_control_unified();  // Unified payload control (manual + auto)
     mode_phase = 1;
     current = ModeId::MANU;
-    Serial.print("ch_roll:");
-    Serial.print(ch_roll);
-    Serial.print(" |ch_pitch:");
-    Serial.print(ch_pitch);
-    Serial.print(" |ch_thr:");
-    Serial.print(ch_throttle);
-    Serial.print(" |ch_yaw:");
-    Serial.print(ch_yaw);
+    // Serial.print("ch_roll:");
+    // Serial.print(ch_roll);
+    // Serial.print(" |ch_pitch:");
+    // Serial.print(ch_pitch);
+    // Serial.print(" |ch_thr:");
+    // Serial.print(ch_throttle);
+    // Serial.print(" |ch_yaw:");
+    // Serial.print(ch_yaw);
   }
 
   void _exit() override {
@@ -145,7 +145,8 @@ protected:
                           imu.roll, imu.pitch, imu.yaw,
                           imu.gyro_y, imu.gyro_x, imu.gyro_z);
     fw_servos_out_fbwa();
-    plane_motors_out();
+    // plane_motors_out();
+    dual_motor_throttle_out_yaw();
     payload_control_unified();  // Unified payload control (manual + auto)
     mode_phase = 2;
     current = ModeId::FBWA;
@@ -181,7 +182,8 @@ protected:
     stabilize();
     payload_control_unified();  // Unified payload control (manual + auto)
     servos_out_fbwa();
-    plane_motors_out();
+    // plane_motors_out();
+    dual_motor_throttle_out_yaw();
     mode_phase = 3;
     current = ModeId::AUTO;
   }

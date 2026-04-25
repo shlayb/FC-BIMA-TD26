@@ -23,23 +23,23 @@
 // #define MOTOR_4_PIN  14
 
 //PIN FC BARU
-#define SERVO_AIL_L 5  //MTR 11
-#define SERVO_ELE 11    //MTR 10
+#define SERVO_AIL_L 11  //MTR 10
+#define SERVO_ELE 13    //MTR 11
 //#define THROTTLE 1  //MTR  (Tidak dipakai)
 #define SERVO_RUD_L 3 //MTR 7
 #define SERVO_AIL_R 14 //MTR 6
-#define SERVO_RUD_R 6 //MTR 3
-#define SERVO_PAYLOAD 12 //MTR 5
+#define SERVO_RUD_R 5 //MTR 8
+#define SERVO_PAYLOAD 12 //MTR 5 
 #define MOTOR_1_PIN 31  //MTR 4  (Tidak dipakai)
 #define MOTOR_2_PIN 32 //FC pin DICEK LAGI (Tidak dipakai)
 #define MOTOR_3_PIN 33  //FC pin 9 (Tidak dipakai)
 #define MOTOR_4_PIN 13 //FC pin 10 (Tidak dipakai)
 
 #define MTR_1_PIN 9  // MTR 9 (Throttle Kanan)
-#define MTR_2_PIN 13 //MTR 8  (Throttle Kiri)
+#define MTR_2_PIN 2  // MTR 11  (Throttle Kiri) - Changed from pin 6 to pin 2 (PWM capable, no conflicts)
 //Pin belum dipake =>> mtr 11 = Pin 13
 
-Servo motor1, motor2, motor3, motor4;
+// Servo motor1, motor2, motor3, motor4;
 Servo aileron_L; 
 Servo aileron_R;
 Servo elevator;
@@ -135,10 +135,10 @@ void init_actuator() {
     pinMode(SERVO_AIL_R, OUTPUT);
     pinMode(SERVO_RUD_R, OUTPUT);
     //pinMode(THROTTLE, OUTPUT);
-    pinMode(MOTOR_1_PIN, OUTPUT);
-    pinMode(MOTOR_2_PIN, OUTPUT);
-    pinMode(MOTOR_3_PIN, OUTPUT);
-    pinMode(MOTOR_4_PIN, OUTPUT);
+    // pinMode(MOTOR_1_PIN, OUTPUT);
+    // pinMode(MOTOR_2_PIN, OUTPUT);
+    // pinMode(MOTOR_3_PIN, OUTPUT);
+    // pinMode(MOTOR_4_PIN, OUTPUT);
     pinMode(SERVO_PAYLOAD, OUTPUT);
     pinMode(MTR_1_PIN, OUTPUT);
     pinMode(MTR_2_PIN, OUTPUT);
@@ -152,15 +152,15 @@ void init_actuator() {
     //pusher.attach(THROTTLE);
     mtr_1.attach(MTR_1_PIN);
     mtr_2.attach(MTR_2_PIN);
-    motor1.attach(MOTOR_1_PIN);
-    motor2.attach(MOTOR_2_PIN);
-    motor3.attach(MOTOR_3_PIN);
-    motor4.attach(MOTOR_4_PIN);
+    // motor1.attach(MOTOR_1_PIN);
+    // motor2.attach(MOTOR_2_PIN);
+    // motor3.attach(MOTOR_3_PIN);
+    // motor4.attach(MOTOR_4_PIN);
 
-    motor1.writeMicroseconds(988);
-    motor2.writeMicroseconds(988);
-    motor3.writeMicroseconds(988);
-    motor4.writeMicroseconds(988);
+    // motor1.writeMicroseconds(988);
+    // motor2.writeMicroseconds(988);
+    // motor3.writeMicroseconds(988);
+    // motor4.writeMicroseconds(988);
     // pusher.writeMicroseconds(988);
     mtr_1.writeMicroseconds(988);
     mtr_2.writeMicroseconds(988);
@@ -171,10 +171,10 @@ void init_actuator() {
 }
 
 void motor_loop(int pwm1, int pwm2, int pwm3, int pwm4) {
-    motor1.writeMicroseconds(pwm1);
-    motor2.writeMicroseconds(pwm2);
-    motor3.writeMicroseconds(pwm3);
-    motor4.writeMicroseconds(pwm4);
+    // motor1.writeMicroseconds(pwm1);
+    // motor2.writeMicroseconds(pwm2);
+    // motor3.writeMicroseconds(pwm3);
+    // motor4.writeMicroseconds(pwm4);
 
     // motor1.writeMicroseconds(ch_throttle);
     // motor2.writeMicroseconds(ch_throttle);
@@ -366,10 +366,10 @@ void copter_nyt_calcOutput(int16_t ch_thr)
 }
 
 void motor_loop_nyt(int pwm1, int pwm2, int pwm3, int pwm4, int pwm_yaw_l = 0, int pwm_yaw_r = 0) {
-    motor1.writeMicroseconds(pwm1);
-    motor2.writeMicroseconds(pwm2);
-    motor3.writeMicroseconds(pwm3);
-    motor4.writeMicroseconds(pwm4);
+    // motor1.writeMicroseconds(pwm1);
+    // motor2.writeMicroseconds(pwm2);
+    // motor3.writeMicroseconds(pwm3);
+    // motor4.writeMicroseconds(pwm4);
     aileron_L.writeMicroseconds(pwm_yaw_l); // untuk yaw kiri
     aileron_R.writeMicroseconds(pwm_yaw_r); // untuk yaw kanan
 
@@ -495,17 +495,17 @@ float PercenttoPWM(float Percent){
    return Percent;
 }
 
-void plane_motors_out() {
+void plane_motors_out() { //GA KEPAKE
     motor_pwm = ch_throttle;
     if (mode_fbwa_plane) {
         motor_pwm = constrain(motor_pwm, MIN_THROTTLE_PWM, MAX_THROTTLE_PWM);
     }
 
      float yaw_diff = (ch_yaw - 1500) * 0.3f;  // Gain bisa di-tune (0.3f)
-    dual_motor_throttle_out_yaw(motor_pwm, yaw_diff);
+    // dual_motor_throttle_out_yaw();
 }
 
-void dual_motor_throttle_out(int pwm_throttle) {
+void dual_motor_throttle_out(int pwm_throttle) { //GA KEPAKE
     pwm_throttle = constrain(pwm_throttle, 988, 2012);
     if (arming) {
         mtr_1.writeMicroseconds(pwm_throttle);  // Kanan
@@ -517,9 +517,11 @@ void dual_motor_throttle_out(int pwm_throttle) {
 }
 
 // Jika ingin kontrol yaw via thrust differential:
-void dual_motor_throttle_out_yaw(int pwm_base, float yaw_diff) {
-    int pwm_right = constrain(pwm_base + yaw_diff, 988, 2012);
-    int pwm_left = constrain(pwm_base - yaw_diff, 988, 2012);
+void dual_motor_throttle_out_yaw() {
+    motor_pwm = ch_throttle;
+    float yaw_diff = (ch_yaw - 1500) * 0.3f;
+    int pwm_right = constrain(motor_pwm + yaw_diff, 988, 2012);
+    int pwm_left = constrain(motor_pwm - yaw_diff, 988, 2012);
     
     if (arming) {
         mtr_1.writeMicroseconds(pwm_right);  // Kanan
@@ -529,11 +531,11 @@ void dual_motor_throttle_out_yaw(int pwm_base, float yaw_diff) {
         mtr_2.writeMicroseconds(988);
     }
 }
-void plane_motors_out_auto(float pwm) {
+void plane_motors_out_auto(float pwm) { //GA KEPAKE
     motor_pwm = pwm;
     motor_pwm = constrain(motor_pwm, MIN_THROTTLE_PWM, MAX_THROTTLE_PWM);
     float yaw_diff = u_yaw_cmd * 100.0f;
-    dual_motor_throttle_out_yaw(motor_pwm, yaw_diff);
+    // dual_motor_throttle_out_yaw();
 }
 
 int32_t commanded_throttle; 
@@ -582,10 +584,10 @@ void flywing_servos_out(int pwm_L, int pwm_R){
 }
 
 void motorCopterOff(int pwm1, int pwm2, int pwm3, int pwm4) {
-    motor1.writeMicroseconds(pwm1);
-    motor2.writeMicroseconds(pwm2);
-    motor3.writeMicroseconds(pwm3);
-    motor4.writeMicroseconds(pwm4);
+    // motor1.writeMicroseconds(pwm1);
+    // motor2.writeMicroseconds(pwm2);
+    // motor3.writeMicroseconds(pwm3);
+    // motor4.writeMicroseconds(pwm4);
     // pusher.writeMicroseconds(988);
 }
 
