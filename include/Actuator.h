@@ -255,7 +255,7 @@ void payload_control_unified() {
         } 
         // Prioritas 2: Gunakan kontrol MANUAL dari remote jika tidak ada auto command
         else if (ch_vehicle_mode > 1500) {
-            servo_pwm_payload = 2000; // drop
+            servo_pwm_payload = 3000; // drop
             payload_dropping = false;  // reset flag untuk auto
             // Serial.println("[PAYLOAD] MANUAL DROP via Remote");
         } else {

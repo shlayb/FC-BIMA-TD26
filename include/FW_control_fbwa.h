@@ -29,7 +29,7 @@ class FW_FWBA {
     signed char selector[4][3] = {
         { 1,  0,  0},   // aileron right
         { 1,  0,  0},   // aileron left 
-        { 0,  -1,  0},   // elevator //trainer +, wahana -
+        { 0,  1,  0},   // elevator //trainer +, wahana -
         { 0,  0,  1}    // rudder
     };
     void updateFBWA_FW(int16_t ch_r, int16_t ch_p, int16_t ch_y, int16_t ch_thr,
@@ -85,7 +85,7 @@ void FW_FWBA::updateFBWA_FW(int16_t ch_r, int16_t ch_p, int16_t ch_y, int16_t ch
     u_roll = ((-fw_gain.rate_roll_P * (-roll + roll_int - (roll_cmd + trim_roll))) + (-fw_gain.rate_roll_D * (gy)));
     // Serial.print(" |u_roll:");
     // Serial.print(u_roll);
-    u_pitch = ((fw_gain.rate_pitch_P * (-pitch + pitch_int - (pitch_cmd + trim_pitch))) + (-fw_gain.rate_pitch_D * (gx)));
+    u_pitch = ((fw_gain.rate_pitch_P * (-pitch + pitch_int - (-pitch_cmd + trim_pitch))) + (-fw_gain.rate_pitch_D * (gx)));
     // Serial.print(" |u_pitch:");
     // Serial.print(u_pitch);
 

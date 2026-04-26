@@ -101,7 +101,7 @@ void calc_nav_pitch()
         demanded_pitch = 0;
     }
     else {
-        demanded_pitch = -get_pitch_demand();
+        demanded_pitch = get_pitch_demand();
     }
     
     nav_pitch_deg = constrain(demanded_pitch, pitch_limit_min, pitch_limit_max);

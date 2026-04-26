@@ -35,7 +35,7 @@ float calc_nav_yaw_coordinated() {
 
 void stabilize_pitch(float speed_scaler) {
     plane_control_t.pitch_setpoint = -nav_pitch_deg;
-    plane_control_t.pitch_data = imu.pitch; //dicek lagi kadang suka terbalik pitch nya, kalau kebalik -imu.pitch
+    plane_control_t.pitch_data = -imu.pitch; //dicek lagi kadang suka terbalik pitch nya, kalau kebalik -imu.pitch
     plane_control_t.body_y_rate = imu.gyro_y;
     plane_control_t.speed_scaler = speed_scaler;
     plane_control_t.airspeed_min = MIN_AIRSPEED;

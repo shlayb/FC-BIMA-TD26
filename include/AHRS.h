@@ -348,7 +348,7 @@ void AHRS::get_relative_position_D_home(float &posD) const {
 
 void AHRS::init_ahrs() {
     imu.init_imu();
-    // gepees.initGPS();
+    gepees.initGPS();
     arspd.initAirspeed();
     baro.init_baro();
 }
