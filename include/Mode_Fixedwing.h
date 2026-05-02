@@ -141,7 +141,7 @@ protected:
     
     mode_fbwa_plane = true;
     auto_navigation_mode = false;
-    fw_fbwa.updateFBWA_FW(ch_roll, ch_pitch, ch_yaw, ch_throttle,
+    fw_control.updateFBWA_FW(ch_roll, ch_pitch, ch_yaw, ch_throttle,
                           imu.roll, imu.pitch, imu.yaw,
                           imu.gyro_y, imu.gyro_x, imu.gyro_z);
     fw_servos_out_fbwa();
@@ -179,9 +179,10 @@ protected:
     update_speed_height();
     update_alt();
     updateAuto_FW();
-    stabilize();
+    // stabilize();
+    fw_control.updateAUTO_FW(imu.roll, imu.pitch, imu.yaw, imu.gyro_y, imu.gyro_x, imu.gyro_z);
     payload_control_unified();  // Unified payload control (manual + auto)
-    servos_out_fbwa();
+    fw_servos_out_fbwa();
     // plane_motors_out();
     dual_motor_throttle_out_yaw();
     mode_phase = 3;

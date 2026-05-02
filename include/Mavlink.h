@@ -365,13 +365,13 @@ void MavlinkHandler::printRCStatus() {
 // ============================================================
 void MavlinkHandler::handlePorts() {
     // --- USB (GCS via Mission Planner / QGC) ---
-    while (Serial.available()) {
-        uint8_t c = Serial.read();
-        if (mavlink_parse_char(MAVLINK_COMM_0, c, &rxmsg, &st_usb)) {
-            processAsFC(rxmsg, PORT_USB);
-            forwardToOthers(rxmsg, PORT_USB);
-        }
-    }
+    // while (Serial.available()) {
+    //     uint8_t c = Serial.read();
+    //     if (mavlink_parse_char(MAVLINK_COMM_0, c, &rxmsg, &st_usb)) {
+    //         processAsFC(rxmsg, PORT_USB);
+    //         forwardToOthers(rxmsg, PORT_USB);
+    //     }
+    // }
 
     // --- Serial2: Telemetry Radio DAN ELRS RC ---
     //  ELRS dalam MAVLink mode mengirim RC_CHANNELS_OVERRIDE (ID 70)

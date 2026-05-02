@@ -5,7 +5,7 @@
 #include <Servo.h>
 #include "FW_ControlModes.h"
 #include "Copter_Control.h"
-#include "FW_control_fbwa.h"
+#include "FW_control.h"
 // #include "copter_control_nyt.h"
 #include "flywing_control.h"
 #include "TECS.h"
@@ -58,7 +58,6 @@ void dual_motor_throttle_out_yaw(int pwm_base, float yaw_diff);
 uint32_t payload_drop_start_time = 0;  // Waktu mulai drop
 const uint32_t PAYLOAD_DROP_DURATION = 500; // Durasi drop dalam milliseconds (0.5 detik)
 bool payload_dropping = false;  // Flag untuk tracking status drop
-FW_FWBA fw_fbwa;
 
 float u_roll, u_pitch, u_yaw, u_yaw_cmd;
 float m1_pwm, m2_pwm, m3_pwm, m4_pwm;
@@ -312,10 +311,10 @@ void servos_out_manual() {
 
 void fw_servos_out_fbwa() {
     // Hitung output servo dari kontrol pitch, roll, yaw
-    pwm_ail_L = fw_fbwa.servos[0] + 1500;
-    pwm_ail_R = fw_fbwa.servos[1] + 1500;       
-    pwm_ele   = fw_fbwa.servos[2] + 1500;
-    pwm_rud   = fw_fbwa.servos[3] + 1500;
+    pwm_ail_L = fw_control.servos[0] + 1500;
+    pwm_ail_R = fw_control.servos[1] + 1500;       
+    pwm_ele   = fw_control.servos[2] + 1500;
+    pwm_rud   = fw_control.servos[3] + 1500;
 
     // Output ke servo
     aileron_L.writeMicroseconds(pwm_ail_L);
@@ -518,7 +517,12 @@ void dual_motor_throttle_out(int pwm_throttle) { //GA KEPAKE
 
 // Jika ingin kontrol yaw via thrust differential:
 void dual_motor_throttle_out_yaw() {
-    motor_pwm = ch_throttle;
+    // motor_pwm = ch_throttle;
+    if (mode_now == 3) {
+        motor_pwm = fw_control.get_auto_throttle(); // Dapatkan throttle dari kontrol otomatis
+    } else {
+        motor_pwm = ch_throttle; // Gunakan throttle manual saat belum di fase 3
+    }
     float yaw_diff = (ch_yaw - 1500) * 0.3f;
     int pwm_right = constrain(motor_pwm + yaw_diff, 988, 2012);
     int pwm_left = constrain(motor_pwm - yaw_diff, 988, 2012);
@@ -541,15 +545,15 @@ void plane_motors_out_auto(float pwm) { //GA KEPAKE
 int32_t commanded_throttle; 
 /** calc throttle  */
 void calc_throttle() {
-    commanded_throttle = PercenttoPWM(get_throttle_demand());
-    commanded_throttle = scaleToPercent_reversed(commanded_throttle);
-    commanded_throttle = constrain(commanded_throttle, MIN_THROTTLE_PWM, MAX_THROTTLE_PWM);
+    // commanded_throttle = PercenttoPWM(get_throttle_demand());
+    // commanded_throttle = scaleToPercent_reversed(commanded_throttle);
+    // commanded_throttle = constrain(commanded_throttle, MIN_THROTTLE_PWM, MAX_THROTTLE_PWM);
     
-    //dual_motor_throttle_out(commanded_throttle);  
-    // Ganti dari pusher.writeMicroseconds()
-    // Yaw differential dari autopilot
-    float yaw_diff = u_yaw_cmd * 100.0f;
-    dual_motor_throttle_out_yaw(commanded_throttle, yaw_diff);
+    // //dual_motor_throttle_out(commanded_throttle);  
+    // // Ganti dari pusher.writeMicroseconds()
+    // // Yaw differential dari autopilot
+    // float yaw_diff = u_yaw_cmd * 100.0f;
+    // dual_motor_throttle_out_yaw(commanded_throttle, yaw_diff);
 }
 
 void flywing_calcout()
