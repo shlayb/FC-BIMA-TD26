@@ -25,7 +25,7 @@
 //PIN FC BARU
 #define SERVO_AIL_L 11  //MTR 10
 #define SERVO_ELE 13    //MTR 11
-//#define THROTTLE 1  //MTR  (Tidak dipakai)
+#define THROTTLE 1  //MTR  (Tidak dipakai)
 #define SERVO_RUD_L 3 //MTR 7
 #define SERVO_AIL_R 14 //MTR 6
 #define SERVO_RUD_R 5 //MTR 8
@@ -35,11 +35,11 @@
 #define MOTOR_3_PIN 33  //FC pin 9 (Tidak dipakai)
 #define MOTOR_4_PIN 13 //FC pin 10 (Tidak dipakai)
 
-#define MTR_1_PIN 9  // MTR 9 (Throttle Kanan)
-#define MTR_2_PIN 2  // MTR 11  (Throttle Kiri) - Changed from pin 6 to pin 2 (PWM capable, no conflicts)
-//Pin belum dipake =>> mtr 11 = Pin 13
+// #define MTR_1_PIN 9  // MTR 9 (Throttle Kanan)
+// #define MTR_2_PIN 2  // MTR 11  (Throttle Kiri) - Changed from pin 6 to pin 2 (PWM capable, no conflicts)
+// //Pin belum dipake =>> mtr 11 = Pin 13
 
-// Servo motor1, motor2, motor3, motor4;
+Servo motor1, motor2, motor3, motor4;
 Servo aileron_L; 
 Servo aileron_R;
 Servo elevator;
@@ -51,8 +51,8 @@ Servo mtr_1;
 Servo mtr_2; 
 
 // Forward declaration untuk dual motor throttle
-void dual_motor_throttle_out(int pwm_throttle);
-void dual_motor_throttle_out_yaw(int pwm_base, float yaw_diff);
+// void dual_motor_throttle_out(int pwm_throttle);
+// void dual_motor_throttle_out_yaw(int pwm_base, float yaw_diff);
 
 // Payload drop timing variables
 uint32_t payload_drop_start_time = 0;  // Waktu mulai drop
@@ -133,14 +133,14 @@ void init_actuator() {
     pinMode(SERVO_RUD_L, OUTPUT);
     pinMode(SERVO_AIL_R, OUTPUT);
     pinMode(SERVO_RUD_R, OUTPUT);
-    //pinMode(THROTTLE, OUTPUT);
-    // pinMode(MOTOR_1_PIN, OUTPUT);
-    // pinMode(MOTOR_2_PIN, OUTPUT);
-    // pinMode(MOTOR_3_PIN, OUTPUT);
-    // pinMode(MOTOR_4_PIN, OUTPUT);
+    pinMode(THROTTLE, OUTPUT);
+    pinMode(MOTOR_1_PIN, OUTPUT);
+    pinMode(MOTOR_2_PIN, OUTPUT);
+    pinMode(MOTOR_3_PIN, OUTPUT);
+    pinMode(MOTOR_4_PIN, OUTPUT);
     pinMode(SERVO_PAYLOAD, OUTPUT);
-    pinMode(MTR_1_PIN, OUTPUT);
-    pinMode(MTR_2_PIN, OUTPUT);
+    // pinMode(MTR_1_PIN, OUTPUT);
+    // pinMode(MTR_2_PIN, OUTPUT);
 
     aileron_L.attach(SERVO_AIL_L);
     elevator.attach(SERVO_ELE);
@@ -148,21 +148,21 @@ void init_actuator() {
     aileron_R.attach(SERVO_AIL_R);
     rudder_R.attach(SERVO_RUD_R);
     payload.attach(SERVO_PAYLOAD);
-    //pusher.attach(THROTTLE);
-    mtr_1.attach(MTR_1_PIN);
-    mtr_2.attach(MTR_2_PIN);
-    // motor1.attach(MOTOR_1_PIN);
-    // motor2.attach(MOTOR_2_PIN);
-    // motor3.attach(MOTOR_3_PIN);
-    // motor4.attach(MOTOR_4_PIN);
+    pusher.attach(THROTTLE);
+    // mtr_1.attach(MTR_1_PIN);
+    // mtr_2.attach(MTR_2_PIN);
+    motor1.attach(MOTOR_1_PIN);
+    motor2.attach(MOTOR_2_PIN);
+    motor3.attach(MOTOR_3_PIN);
+    motor4.attach(MOTOR_4_PIN);
 
-    // motor1.writeMicroseconds(988);
-    // motor2.writeMicroseconds(988);
-    // motor3.writeMicroseconds(988);
-    // motor4.writeMicroseconds(988);
-    // pusher.writeMicroseconds(988);
-    mtr_1.writeMicroseconds(988);
-    mtr_2.writeMicroseconds(988);
+    motor1.writeMicroseconds(988);
+    motor2.writeMicroseconds(988);
+    motor3.writeMicroseconds(988);
+    motor4.writeMicroseconds(988);
+    pusher.writeMicroseconds(988);
+    // mtr_1.writeMicroseconds(988);
+    // mtr_2.writeMicroseconds(988);
     payload.writeMicroseconds(1000); // default hold
     servo_pwm_payload = 1000;        // make sure the variable is initialized
 
@@ -170,10 +170,10 @@ void init_actuator() {
 }
 
 void motor_loop(int pwm1, int pwm2, int pwm3, int pwm4) {
-    // motor1.writeMicroseconds(pwm1);
-    // motor2.writeMicroseconds(pwm2);
-    // motor3.writeMicroseconds(pwm3);
-    // motor4.writeMicroseconds(pwm4);
+    motor1.writeMicroseconds(pwm1);
+    motor2.writeMicroseconds(pwm2);
+    motor3.writeMicroseconds(pwm3);
+    motor4.writeMicroseconds(pwm4);
 
     // motor1.writeMicroseconds(ch_throttle);
     // motor2.writeMicroseconds(ch_throttle);
@@ -496,12 +496,14 @@ float PercenttoPWM(float Percent){
 
 void plane_motors_out() { //GA KEPAKE
     motor_pwm = ch_throttle;
-    if (mode_fbwa_plane) {
-        motor_pwm = constrain(motor_pwm, MIN_THROTTLE_PWM, MAX_THROTTLE_PWM);
+    if (mode_fbwa_plane) {                                                     // mode_fbwa
+        motor_pwm = constrain(motor_pwm, MIN_THROTTLE_PWM, MAX_THROTTLE_PWM);  // pwmnya gabisa maks 100 persen krn diatur sesuai min dan max throttle
     }
-
-     float yaw_diff = (ch_yaw - 1500) * 0.3f;  // Gain bisa di-tune (0.3f)
-    // dual_motor_throttle_out_yaw();
+    if (arming) {
+        pusher.writeMicroseconds(motor_pwm);  // ch_throttle (jgn pake ini dulu)
+    } else if (!arming) {
+        pusher.writeMicroseconds(988);
+    }
 }
 
 void dual_motor_throttle_out(int pwm_throttle) { //GA KEPAKE
@@ -588,11 +590,11 @@ void flywing_servos_out(int pwm_L, int pwm_R){
 }
 
 void motorCopterOff(int pwm1, int pwm2, int pwm3, int pwm4) {
-    // motor1.writeMicroseconds(pwm1);
-    // motor2.writeMicroseconds(pwm2);
-    // motor3.writeMicroseconds(pwm3);
-    // motor4.writeMicroseconds(pwm4);
-    // pusher.writeMicroseconds(988);
+    motor1.writeMicroseconds(pwm1);
+    motor2.writeMicroseconds(pwm2);
+    motor3.writeMicroseconds(pwm3);
+    motor4.writeMicroseconds(pwm4);
+    pusher.writeMicroseconds(988);
 }
 
 #endif

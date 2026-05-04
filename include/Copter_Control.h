@@ -211,9 +211,9 @@ void copter_ControlFSFB(int16_t ch_r, int16_t ch_p, int16_t ch_y, int16_t ch_thr
     }
 
     // ===== RC → angle command =====
-    // roll_cmd  = 1.3f*(map(ch_r - 1500, min_roll_corr,  max_roll_corr,  min_roll,  max_roll));
-    // pitch_cmd = 1.1f*(map(ch_p - 1500, min_pitch_corr, max_pitch_corr, min_pitch, max_pitch));
-    // yaw_cmd   = 1.3f*(map(ch_y - 1500, min_yaw_corr,   max_yaw_corr,   min_yaw,   max_yaw));
+    roll_cmd  = 1.3f*(map(ch_r - 1500, min_roll_corr,  max_roll_corr,  min_roll,  max_roll));
+    pitch_cmd = 1.1f*(map(ch_p - 1500, min_pitch_corr, max_pitch_corr, min_pitch, max_pitch));
+    yaw_cmd   = 1.3f*(map(ch_y - 1500, min_yaw_corr,   max_yaw_corr,   min_yaw,   max_yaw));
 
     // tambahkan koreksi pos-hold
     roll_cmd  += roll_pos;

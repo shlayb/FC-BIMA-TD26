@@ -103,8 +103,8 @@ protected:
     mode_fbwa_plane = false;
     auto_navigation_mode = false;
     servos_out_manual();
-    // plane_motors_out();  // pusher.writeMicroseconds(988);
-    dual_motor_throttle_out_yaw();  // Kontrol throttle langsung ke motor (tanpa yaw diff)
+    plane_motors_out();  // pusher.writeMicroseconds(988);
+    // dual_motor_throttle_out_yaw();  // Kontrol throttle langsung ke motor (tanpa yaw diff)
     payload_control_unified();  // Unified payload control (manual + auto)
     mode_phase = 1;
     current = ModeId::MANU;
@@ -145,8 +145,8 @@ protected:
                           imu.roll, imu.pitch, imu.yaw,
                           imu.gyro_y, imu.gyro_x, imu.gyro_z);
     fw_servos_out_fbwa();
-    // plane_motors_out();
-    dual_motor_throttle_out_yaw();
+    plane_motors_out();
+    // dual_motor_throttle_out_yaw();
     payload_control_unified();  // Unified payload control (manual + auto)
     mode_phase = 2;
     current = ModeId::FBWA;
@@ -183,8 +183,8 @@ protected:
     fw_control.updateAUTO_FW(imu.roll, imu.pitch, imu.yaw, imu.gyro_y, imu.gyro_x, imu.gyro_z);
     payload_control_unified();  // Unified payload control (manual + auto)
     fw_servos_out_fbwa();
-    // plane_motors_out();
-    dual_motor_throttle_out_yaw();
+    plane_motors_out();
+    // dual_motor_throttle_out_yaw();
     mode_phase = 3;
     current = ModeId::AUTO;
   }
