@@ -194,7 +194,46 @@ protected:
   }
 };
 
+// ======================= MODE GUIDED (Fixed Wing) =========================
+class ModeGuided_FW : public ModeBase {
+public:
+  ModeId id() const override { return ModeId::GUIDED; }
+
+protected:
+  bool _enter() override {
+    auto_throttle_mode = true;
+    auto_navigation_mode = true;
+    mode_fbwa_plane = true;
+    return true;
+  }
+
+  void _update() override {
+    ahrs.update_ahrs();
+    nav_gps();
+
+    mode_fbwa_plane = true;
+    auto_navigation_mode = true;
+
+    navigate();
+    update_speed_height();
+    update_alt();
+    updateAuto_FW();
+    fw_control.updateAUTO_FW(imu.roll, imu.pitch, imu.yaw, imu.gyro_y, imu.gyro_x, imu.gyro_z);
+    payload_control_unified();
+    fw_servos_out_fbwa();
+    plane_motors_out();
+    mode_phase = 4;
+    current = ModeId::GUIDED;
+  }
+
+  void _exit() override {
+    auto_navigation_mode = false;
+    auto_throttle_mode = false;
+  }
+};
+
 // Create OOP instances
 ModeManual_FW     mMANU_FW;
 ModeFBWA_FW       mFBWA_FW;
 ModeAuto_FW       mAUTO_FW;
+ModeGuided_FW     mGUIDED_FW;

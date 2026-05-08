@@ -36,8 +36,7 @@
 #define MOTOR_4_PIN 13 //FC pin 10 (Tidak dipakai)
 
 // #define MTR_1_PIN 9  // MTR 9 (Throttle Kanan)
-// #define MTR_2_PIN 2  // MTR 11  (Throttle Kiri) - Changed from pin 6 to pin 2 (PWM capable, no conflicts)
-// //Pin belum dipake =>> mtr 11 = Pin 13
+// #define MTR_2_PIN 2  // MTR 1  (Throttle Kiri) - Changed from pin 6 to pin 2 (PWM capable, no conflicts)
 
 Servo motor1, motor2, motor3, motor4;
 Servo aileron_L; 

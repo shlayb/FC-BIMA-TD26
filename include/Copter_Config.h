@@ -6,13 +6,6 @@
 #define PWM4_MIN 1047
 #define PWM_MAX 2012
 
-#define max_roll_corr 512//511
-#define max_pitch_corr 512//513
-#define max_yaw_corr 512//510
-#define min_roll_corr -512//-514
-#define min_pitch_corr -512//-510
-#define min_yaw_corr -512//-517
-
 //fbwastate
 #define max_roll_limit = 75;
 #define min_roll_limit = -75;

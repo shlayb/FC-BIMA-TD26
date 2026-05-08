@@ -180,6 +180,8 @@ private:
     void handleMissionItemInt(const mavlink_message_t& msg);
     void handleMissionItem(const mavlink_message_t& msg);
     void handleMissionClearAll(const mavlink_message_t& msg);
+    void handleSetPositionTargetLocalNed(const mavlink_message_t& msg);
+    void handleSetPositionTargetGlobalInt(const mavlink_message_t& msg);
     void processAsFC(const mavlink_message_t& msg, PortId from);
     void forwardToOthers(const mavlink_message_t& msg, PortId from);
 
@@ -241,7 +243,7 @@ void MavlinkHandler::mavSendAll(const mavlink_message_t& msg) {
     // CATATAN: Serial USB TIDAK dikirimi binary MAVLink agar Serial Monitor
     // tetap bisa baca debug text (printRCStatus, Serial.printf, dsb).
     // Aktifkan baris ini HANYA jika GCS (Mission Planner/QGC) konek via USB:
-    // mavWriteUSB(Serial, msg);
+    mavWriteUSB(Serial, msg);
     mavWrite(Serial2, msg);   // Telemetry Radio / ELRS
     mavWrite(Serial7, msg);   // RPi UART
 }
@@ -420,6 +422,8 @@ void MavlinkHandler::processAsFC(const mavlink_message_t& msg, PortId from) {
     switch (msg.msgid) {
         case MAVLINK_MSG_ID_COMMAND_LONG:          handleCommandLong(msg);         break;
         case MAVLINK_MSG_ID_STATUSTEXT:            handleStatusText(msg);          break;
+        case MAVLINK_MSG_ID_SET_POSITION_TARGET_LOCAL_NED:  handleSetPositionTargetLocalNed(msg);  break;
+        case MAVLINK_MSG_ID_SET_POSITION_TARGET_GLOBAL_INT: handleSetPositionTargetGlobalInt(msg); break;
         case MAVLINK_MSG_ID_MISSION_REQUEST_LIST:  handleMissionRequestList(msg);  break;
         case MAVLINK_MSG_ID_MISSION_REQUEST:       handleMissionRequest(msg);      break;
         case MAVLINK_MSG_ID_MISSION_REQUEST_INT:   handleMissionRequestInt(msg);   break;
@@ -520,9 +524,12 @@ void MavlinkHandler::handleCommandLong(const mavlink_message_t& msg) {
             int         new_mode   = 0;
             const char* mode_name  = "UNKNOWN";
 
+            // Fixedwing VTOL mapping:
+            // 0=MANUAL, 5=FBWA, 4=GUIDED, 10=AUTO
             if      (custom_mode == 0)  { new_mode = 1; mode_name = "MANUAL"; }
             else if (custom_mode == 5)  { new_mode = 2; mode_name = "FBWA"; }
-            else if (custom_mode == 10) { new_mode = 3; mode_name = "AUTO"; }
+            else if (custom_mode == 4)  { new_mode = 3; mode_name = "GUIDED"; }
+            else if (custom_mode == 10) { new_mode = 4; mode_name = "AUTO"; }
             else {
                 result = MAV_RESULT_UNSUPPORTED;
                 sendStatusText(MAV_SEVERITY_WARNING, "MODE NOT SUPPORTED");
@@ -743,6 +750,56 @@ void MavlinkHandler::handleMissionClearAll(const mavlink_message_t& msg) {
     sendStatusText(MAV_SEVERITY_INFO, "Missions cleared");
 }
 
+void MavlinkHandler::handleSetPositionTargetLocalNed(const mavlink_message_t& msg) {
+    mavlink_set_position_target_local_ned_t sp;
+    mavlink_msg_set_position_target_local_ned_decode(&msg, &sp);
+
+    const uint16_t ignore_x = (1U << 0);
+    const uint16_t ignore_y = (1U << 1);
+    const uint16_t ignore_z = (1U << 2);
+    if ((sp.type_mask & (ignore_x | ignore_y | ignore_z)) != 0) {
+        return;
+    }
+
+    Locations origin = home_wp_loc;
+    if (!origin.initialised()) {
+        origin = current_loc;
+    }
+
+    Locations target = origin;
+    target.offset(sp.x, sp.y);
+    target.alt = origin.alt - (int32_t)lroundf(sp.z * 100.0f);
+
+    rpi_external_setpoint_target = target;
+    rpi_external_setpoint_last_ms = millis();
+    rpi_external_setpoint_active = true;
+    rpi_external_setpoint_yaw_deg = degrees(sp.yaw);
+    rpi_external_setpoint_yaw_valid = !isnan(sp.yaw);
+}
+
+void MavlinkHandler::handleSetPositionTargetGlobalInt(const mavlink_message_t& msg) {
+    mavlink_set_position_target_global_int_t sp;
+    mavlink_msg_set_position_target_global_int_decode(&msg, &sp);
+
+    const uint16_t ignore_x = (1U << 0);
+    const uint16_t ignore_y = (1U << 1);
+    const uint16_t ignore_z = (1U << 2);
+    if ((sp.type_mask & (ignore_x | ignore_y | ignore_z)) != 0) {
+        return;
+    }
+
+    Locations target;
+    target.lat = sp.lat_int;
+    target.lng = sp.lon_int;
+    target.alt = (int32_t)lroundf(sp.alt * 100.0f);
+
+    rpi_external_setpoint_target = target;
+    rpi_external_setpoint_last_ms = millis();
+    rpi_external_setpoint_active = true;
+    rpi_external_setpoint_yaw_deg = degrees(sp.yaw);
+    rpi_external_setpoint_yaw_valid = !isnan(sp.yaw);
+}
+
 // ============================================================
 //  HEARTBEAT
 // ============================================================
@@ -761,18 +818,31 @@ void MavlinkHandler::sendHeartbeat() {
 
 uint8_t MavlinkHandler::getBaseMode() const {
     switch (current) {
-        case ModeId::MANU: return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | MAV_MODE_FLAG_MANUAL_INPUT_ENABLED;
-        case ModeId::FBWA: return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | MAV_MODE_FLAG_MANUAL_INPUT_ENABLED | MAV_MODE_FLAG_STABILIZE_ENABLED;
-        case ModeId::AUTO: return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | MAV_MODE_FLAG_AUTO_ENABLED | MAV_MODE_FLAG_GUIDED_ENABLED;
+        case ModeId::MANU:
+            return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED |
+                   MAV_MODE_FLAG_MANUAL_INPUT_ENABLED;
+        case ModeId::FBWA:
+            return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED |
+                   MAV_MODE_FLAG_MANUAL_INPUT_ENABLED |
+                   MAV_MODE_FLAG_STABILIZE_ENABLED;
+        case ModeId::GUIDED:
+            return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED |
+                   MAV_MODE_FLAG_GUIDED_ENABLED |
+                   MAV_MODE_FLAG_STABILIZE_ENABLED;
+        case ModeId::AUTO:
+            return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED |
+                   MAV_MODE_FLAG_AUTO_ENABLED |
+                   MAV_MODE_FLAG_STABILIZE_ENABLED;
         default:           return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | MAV_MODE_FLAG_MANUAL_INPUT_ENABLED;
     }
 }
 
 uint32_t MavlinkHandler::getCustomMode() const {
     switch (current) {
-        case ModeId::MANU: return 0;
-        case ModeId::FBWA: return 5;
-        case ModeId::AUTO: return 10;
+        case ModeId::MANU:   return 0;
+        case ModeId::FBWA:   return 5;
+        case ModeId::GUIDED: return 4;
+        case ModeId::AUTO:   return 10;
         default:           return 0;
     }
 }

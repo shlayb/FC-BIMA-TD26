@@ -185,10 +185,10 @@ void voltage(void *pvParameters){
 };
 
 void controlThd(void *pvParameters){
-    // pilih model yang ingin dipakai
-    // Fixedwing
+    // Fixedwing VTOL mode set
     modes.registerMode(&mMANU_FW);
     modes.registerMode(&mFBWA_FW);
+    modes.registerMode(&mGUIDED_FW);
     modes.registerMode(&mAUTO_FW);
     for(;;){
     setup_mode();

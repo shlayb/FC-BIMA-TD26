@@ -21,6 +21,13 @@ int wp_sum                  =  0;
 int land_sum                =  1;
 int takeoff_sum             =  1;
 
+// External setpoint from Raspberry Pi (MAVLink SET_POSITION_TARGET_*)
+bool rpi_external_setpoint_active = false;
+uint32_t rpi_external_setpoint_last_ms = 0;
+Locations rpi_external_setpoint_target{};
+float rpi_external_setpoint_yaw_deg = 0.0f;
+bool rpi_external_setpoint_yaw_valid = false;
+
 
 Locations waypoint[100];
 // Locations landing[1]; //conflic declaration

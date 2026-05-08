@@ -10,6 +10,13 @@
 #include "pos_hold.h"
 #include "TimingUtils.h"
 
+int max_roll_corr =  512;//511
+int max_pitch_corr =  512;//513
+int max_yaw_corr =  512;//510
+int min_roll_corr =  -512;//-514
+int min_pitch_corr =  -512;//-510
+int min_yaw_corr =  -512;//-517
+
 // ===================== FRAME MIX (punyamu) =====================
 // F450 frame konfigurasi x
 // const double A_invers[4][4] = {

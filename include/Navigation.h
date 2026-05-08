@@ -150,6 +150,33 @@ void add_waypoint(int32_t lat, int32_t lng, int32_t alt, int index) {
 }
 
 void navigate() {
+    if (rpi_external_setpoint_active) {
+        if (millis() - rpi_external_setpoint_last_ms > 1000) {
+            rpi_external_setpoint_active = false;
+            rpi_external_setpoint_yaw_valid = false;
+        } else {
+            prev_WP_loc = current_loc;
+            next_WP_loc = rpi_external_setpoint_target;
+            auto_state.next_wp_crosstrack = false;
+            target_altitude.amsl_cm = rpi_external_setpoint_target.alt;
+            auto_navigation_mode = true;
+            update_wp_nav();
+            return;
+        }
+    }
+
+    if (current == ModeId::GUIDED) {
+        prev_WP_loc = current_loc;
+        next_WP_loc = current_loc;
+        auto_state.next_wp_crosstrack = false;
+        target_altitude.amsl_cm = current_loc.alt;
+        auto_state.distance_next_wp = 0.0f;
+        auto_state.bearing = 0.0f;
+        auto_state.wp_proportion = 0.0f;
+        update_wp_nav();
+        return;
+    }
+
     if (auto_navigation_mode) {
         if (flag_wp < 0) {
             flag_wp++;
