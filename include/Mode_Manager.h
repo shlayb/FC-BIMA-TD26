@@ -33,10 +33,12 @@ void setup_mode(){
   }
 
   ModeId want = active_mode; // default: tetap di mode sekarang
+  //  FIX: RC channels only support 3 modes
+  // GUIDED only via GCS/MAVLink (mode_now == 4)
   if (mode_now == 1) want = ModeId::MANU;
   else if (mode_now == 2) want = ModeId::FBWA;
-  else if (mode_now == 3) want = ModeId::GUIDED;
-  else if (mode_now == 4) want = ModeId::AUTO;
+  else if (mode_now == 3) want = ModeId::AUTO;
+  else if (mode_now == 4) want = ModeId::GUIDED;  //  GCS command only
 
   // transisi full mode
     // if(mode_now == 1 && active_mode == ModeId::FBWA && active_mode != ModeId::AUTO){
