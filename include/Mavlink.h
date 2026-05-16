@@ -41,6 +41,7 @@
 #include <cstring>
 #include <Locations.h>
 #include "WP_EEPROM.h"
+#include "Params.h"
 
 // External globals
 extern Locations waypoint[100];
@@ -95,6 +96,8 @@ private:
     static const uint8_t  SYSTEM_ID    = 1;
     static const uint8_t  COMPONENT_ID = MAV_COMP_ID_AUTOPILOT1;
 
+    uint16_t param_send_index = UINT16_MAX;
+
     // static const unsigned long HEARTBEAT_MS        = 1000;
     // static const unsigned long ATT_MS              = 100;
     // static const unsigned long ALT_MS              = 300;
@@ -105,12 +108,13 @@ private:
     // static const unsigned long RC_PRINT_MS         = 100;   // Debug print RC @ 10 Hz
     // Di MAV.h, ubah semua interval jadi lebih jarang
     static const unsigned long HEARTBEAT_MS      = 1000;  // tetap
-    static const unsigned long ATT_MS            = 200;   // 5Hz  (dari 50ms/20Hz)
+    static const unsigned long ATT_MS            = 100;   // 5Hz  (dari 50ms/20Hz)
     static const unsigned long ALT_MS            = 500;   // 2Hz  (dari 300ms)
-    static const unsigned long GPS_MS            = 1000;  // 1Hz  (dari 500ms)
-    static const unsigned long VFR_MS            = 500;   // 2Hz  (dari 200ms)
+    static const unsigned long GPS_MS            = 200;  // 1Hz  (dari 500ms)
+    static const unsigned long VFR_MS            = 250;   // 2Hz  (dari 200ms)
     static const unsigned long BATTERY_MS        = 5000;  // 0.2Hz (dari 1000ms)
     static const unsigned long NAV_CONTROLLER_MS = 1000;  // 1Hz  (dari 200ms)
+    static const unsigned long GLOBAL_POS_MS = 200; // 5Hz
 
     static constexpr float     ALERT_THRESHOLD_DEG = 40.0f;
     static const unsigned long ALERT_DEBOUNCE_MS   = 2000;
@@ -127,10 +131,11 @@ private:
     unsigned long lastNavController = 0;
     unsigned long lastAlert         = 0;
     unsigned long lastRcPrint       = 0;
+    unsigned long lastGlobalPos = 0;
 
     // --- MAVLink buffers ---
     mavlink_status_t  st_usb, st_tlm, st_rpi;
-    mavlink_message_t rxmsg;
+  mavlink_message_t rxmsg_usb, rxmsg_tlm, rxmsg_rpi;
 
     // --- Mission state ---
     MissionState mission_state      = MISSION_IDLE;
@@ -153,7 +158,7 @@ private:
     void sendAlert(const char* txt);
     void sendAltitude(float altitude);
     void sendAttitude(float roll_rad, float pitch_rad, float yaw_rad);
-    void sendGpsRawInt(uint8_t fix_type, int32_t lat, int32_t lon,
+    void sendGpsRawInt(uint8_t fix_type, int32_t lat, int32_t lon, int32_t alt,
                        uint16_t eph, uint16_t vel, uint16_t cog,
                        uint8_t satellites_visible);
     void sendBatteryStatus(float voltage, int16_t current_amp, int8_t battery_remaining);
@@ -164,6 +169,7 @@ private:
     void sendVfrHud(float airspeed, float groundspeed, float heading,
                     float altitude, float climb_rate);
     void sendMissionItemReached(uint16_t seq);
+    void sendGlobalPositionInt();
 
     uint8_t  getBaseMode()   const;
     uint32_t getCustomMode() const;
@@ -202,6 +208,12 @@ private:
     // --------------------------------------------------------
     void printRCStatus();
 
+    // --- Param handlers ---
+    void handleParamRequestList(const mavlink_message_t& msg);
+    void handleParamRequestRead(const mavlink_message_t& msg);
+    void handleParamSet        (const mavlink_message_t& msg);
+    void sendParamValue        (uint16_t index);
+    void pumpParamStream       ();
 public:
     MavlinkHandler();
 
@@ -231,13 +243,12 @@ void MavlinkHandler::mavWrite(HardwareSerial& port, const mavlink_message_t& msg
     uint8_t  buf[MAVLINK_MAX_PACKET_LEN];
     uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
     port.write(buf, len);
-    port.flush();  //  FIX: ensure data is sent immediately
 }
 
 void MavlinkHandler::mavWriteUSB(Stream& port, const mavlink_message_t& msg) {
     uint8_t  buf[MAVLINK_MAX_PACKET_LEN];
     uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
-    port.write(buf, len);    // Note: USB Serial does not have flush() or it's a no-op}
+    port.write(buf, len);
 }
 
 void MavlinkHandler::mavSendAll(const mavlink_message_t& msg) {
@@ -271,14 +282,12 @@ void MavlinkHandler::applyRcToGlobals(uint16_t c1, uint16_t c2, uint16_t c3,
     arming = ch5 > 1500 ? 1 : 0; // Contoh: channel 5 sebagai switch arming
     apply(ch_mode,         c6);
     apply(ch_mode_backup,         c7);
-    //  FIX: RC channels only support 3 modes (MANUAL/FBWA/AUTO)
-    // GUIDED mode only via GCS (MAVLink)
     if (ch_mode_backup <= 1000) {
-        mode_now = 1;  // MANUAL
+        mode_now = 1;
     } else if (ch_mode_backup > 1000 && ch_mode_backup <= 1512) {
-        mode_now = 2;  // FBWA
+        mode_now = 2;
     } else {
-        mode_now = 3;  // AUTO (bukan GUIDED)
+        mode_now = 3;
     }
     apply(ch_vehicle_mode,         c8);
 
@@ -370,13 +379,13 @@ void MavlinkHandler::printRCStatus() {
 // ============================================================
 void MavlinkHandler::handlePorts() {
     // --- USB (GCS via Mission Planner / QGC) ---
-    // while (Serial.available()) {
-    //     uint8_t c = Serial.read();
-    //     if (mavlink_parse_char(MAVLINK_COMM_0, c, &rxmsg, &st_usb)) {
-    //         processAsFC(rxmsg, PORT_USB);
-    //         forwardToOthers(rxmsg, PORT_USB);
-    //     }
-    // }
+    while (Serial.available()) {
+        uint8_t c = Serial.read();
+        if (mavlink_parse_char(MAVLINK_COMM_0, c, &rxmsg_usb, &st_usb)) {
+            processAsFC(rxmsg_usb, PORT_USB);
+            forwardToOthers(rxmsg_usb, PORT_USB);
+        }
+    }
 
     // --- Serial2: Telemetry Radio DAN ELRS RC ---
     //  ELRS dalam MAVLink mode mengirim RC_CHANNELS_OVERRIDE (ID 70)
@@ -384,25 +393,25 @@ void MavlinkHandler::handlePorts() {
     //  diparse di sini — FC messages diteruskan ke USB & RPi.
     while (Serial2.available()) {
         uint8_t c = Serial2.read();
-        if (mavlink_parse_char(MAVLINK_COMM_1, c, &rxmsg, &st_tlm)) {
+        if (mavlink_parse_char(MAVLINK_COMM_1, c, &rxmsg_tlm, &st_tlm)) {
             // Cek apakah ini RC message dari ELRS
-            switch (rxmsg.msgid) {
+            switch (rxmsg_tlm.msgid) {
                 case MAVLINK_MSG_ID_RC_CHANNELS_OVERRIDE:
-                    handleRcChannelsOverride(rxmsg);
+                    handleRcChannelsOverride(rxmsg_tlm);
                     break;
                 case MAVLINK_MSG_ID_RC_CHANNELS:
-                    handleRcChannels(rxmsg);
+                    handleRcChannels(rxmsg_tlm);
                     break;
                 case MAVLINK_MSG_ID_RC_CHANNELS_RAW:
-                    handleRcChannelsRaw(rxmsg);
+                    handleRcChannelsRaw(rxmsg_tlm);
                     break;
                 case MAVLINK_MSG_ID_RADIO_STATUS:
-                    handleRadioStatus(rxmsg);
+                    handleRadioStatus(rxmsg_tlm);
                     break;
                 default:
                     // Bukan RC message → proses sebagai perintah FC
-                    processAsFC(rxmsg, PORT_TLM);
-                    forwardToOthers(rxmsg, PORT_TLM);
+                    processAsFC(rxmsg_tlm, PORT_TLM);
+                    forwardToOthers(rxmsg_tlm, PORT_TLM);
                     break;
             }
         }
@@ -411,9 +420,9 @@ void MavlinkHandler::handlePorts() {
     // --- Serial7: Raspberry Pi ---
     while (Serial7.available()) {
         uint8_t c = Serial7.read();
-        if (mavlink_parse_char(MAVLINK_COMM_2, c, &rxmsg, &st_rpi)) {
-            processAsFC(rxmsg, PORT_RPI);
-            forwardToOthers(rxmsg, PORT_RPI);
+        if (mavlink_parse_char(MAVLINK_COMM_2, c, &rxmsg_rpi, &st_rpi)) {
+            processAsFC(rxmsg_rpi, PORT_RPI);
+            forwardToOthers(rxmsg_rpi, PORT_RPI);
         }
     }
 }
@@ -434,6 +443,9 @@ void MavlinkHandler::processAsFC(const mavlink_message_t& msg, PortId from) {
         case MAVLINK_MSG_ID_MISSION_ITEM_INT:      handleMissionItemInt(msg);      break;
         case MAVLINK_MSG_ID_MISSION_ITEM:          handleMissionItem(msg);         break;
         case MAVLINK_MSG_ID_MISSION_CLEAR_ALL:     handleMissionClearAll(msg);     break;
+        case MAVLINK_MSG_ID_PARAM_REQUEST_LIST: handleParamRequestList(msg); break;
+        case MAVLINK_MSG_ID_PARAM_REQUEST_READ: handleParamRequestRead(msg); break;
+        case MAVLINK_MSG_ID_PARAM_SET:          handleParamSet(msg);         break;
         default: break;
     }
 }
@@ -442,9 +454,6 @@ void MavlinkHandler::processAsFC(const mavlink_message_t& msg, PortId from) {
 //  FORWARD TO OTHERS
 // ============================================================
 void MavlinkHandler::forwardToOthers(const mavlink_message_t& msg, PortId from) {
-    // Serial USB dinonaktifkan agar debug Serial Monitor tidak banjir binary.
-    // Aktifkan jika GCS konek via USB:
-    // if (from != PORT_USB) mavWriteUSB(Serial, msg);
     if (from != PORT_TLM) mavWrite(Serial2, msg);
     if (from != PORT_RPI) mavWrite(Serial7, msg);
 }
@@ -527,10 +536,12 @@ void MavlinkHandler::handleCommandLong(const mavlink_message_t& msg) {
             int         new_mode   = 0;
             const char* mode_name  = "UNKNOWN";
 
+            // Fixedwing VTOL mapping:
+            // 0=MANUAL, 5=FBWA, 4=GUIDED, 10=AUTO
             if      (custom_mode == 0)  { new_mode = 1; mode_name = "MANUAL"; }
             else if (custom_mode == 5)  { new_mode = 2; mode_name = "FBWA"; }
-            else if (custom_mode == 10) { new_mode = 3; mode_name = "AUTO"; }
-            else if (custom_mode == 15) { new_mode = 4; mode_name = "GUIDED"; }  //  GCS-only mode
+            else if (custom_mode == 4)  { new_mode = 3; mode_name = "GUIDED"; }
+            else if (custom_mode == 10) { new_mode = 4; mode_name = "AUTO"; }
             else {
                 result = MAV_RESULT_UNSUPPORTED;
                 sendStatusText(MAV_SEVERITY_WARNING, "MODE NOT SUPPORTED");
@@ -625,7 +636,7 @@ void MavlinkHandler::handleMissionCount(const mavlink_message_t& msg) {
     mavlink_mission_count_t count_msg;
     mavlink_msg_mission_count_decode(&msg, &count_msg);
     expected_count = count_msg.count;
-    Serial.printf("[MAV] Receiving mission count: %d\n", expected_count);
+    Serial.printf("Receiving mission count: %d\n", expected_count);
 
     if (expected_count > MAX_MISSION) {
         mavlink_message_t ack;
@@ -641,28 +652,20 @@ void MavlinkHandler::handleMissionCount(const mavlink_message_t& msg) {
     mission_state       = MISSION_RECEIVING;
     current_upload_seq  = 0;
 
-    //  FIX: Small delay to ensure ACK is sent before requesting first item
-    delayMicroseconds(100);
-
     mavlink_message_t req;
     mavlink_msg_mission_request_int_pack(SYSTEM_ID, COMPONENT_ID, &req,
                                           msg.sysid, msg.compid, 0,
                                           MAV_MISSION_TYPE_MISSION);
     mavSendAll(req);
-    Serial.printf("[MAV] Requesting mission item 0\n");
 }
 
 void MavlinkHandler::handleMissionItemInt(const mavlink_message_t& msg) {
-    if (mission_state != MISSION_RECEIVING) {
-        Serial.printf("[MAV] Reject: not in MISSION_RECEIVING state\n");
-        return;
-    }
+    if (mission_state != MISSION_RECEIVING) return;
 
     mavlink_mission_item_int_t item;
     mavlink_msg_mission_item_int_decode(&msg, &item);
 
     if (item.seq != current_upload_seq) {
-        Serial.printf("[MAV] SEQ MISMATCH: got %d, expected %d\n", item.seq, current_upload_seq);
         mavlink_message_t ack;
         mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
                                      msg.sysid, msg.compid,
@@ -677,21 +680,17 @@ void MavlinkHandler::handleMissionItemInt(const mavlink_message_t& msg) {
     waypoint[item.seq].lat = item.x;
     waypoint[item.seq].lng = item.y;
     waypoint[item.seq].alt = (int32_t)(item.z * 100.0f);
-    Serial.printf("[MAV] WP %d: lat=%ld lon=%ld alt=%.1fm\n", item.seq, (long)item.x, (long)item.y, item.z);
+    Serial.printf("WP %d: lat=%d lon=%d alt=%.1fm\n", item.seq, item.x, item.y, item.z);
 
     current_upload_seq++;
 
     if (current_upload_seq < expected_count) {
-        //  FIX: Small delay between requests to avoid overwhelming Raspi
-        delayMicroseconds(500);
-        
         mavlink_message_t req;
         mavlink_msg_mission_request_int_pack(SYSTEM_ID, COMPONENT_ID, &req,
                                               msg.sysid, msg.compid,
                                               current_upload_seq,
                                               MAV_MISSION_TYPE_MISSION);
         mavSendAll(req);
-        Serial.printf("[MAV] Requesting mission item %d\n", current_upload_seq);
     } else {
         wp_sum = expected_count;
         mavlink_message_t ack;
@@ -700,7 +699,6 @@ void MavlinkHandler::handleMissionItemInt(const mavlink_message_t& msg) {
                                      MAV_MISSION_ACCEPTED,
                                      MAV_MISSION_TYPE_MISSION);
         mavSendAll(ack);
-        Serial.printf("[MAV] Mission upload complete: %d waypoints\n", wp_sum);
         mission_state = MISSION_IDLE;
         sendStatusText(MAV_SEVERITY_INFO, "Mission upload complete");
         if (saveWaypointsToEEPROM()) sendStatusText(MAV_SEVERITY_INFO, "Saved to EEPROM");
@@ -708,16 +706,12 @@ void MavlinkHandler::handleMissionItemInt(const mavlink_message_t& msg) {
 }
 
 void MavlinkHandler::handleMissionItem(const mavlink_message_t& msg) {
-    if (mission_state != MISSION_RECEIVING) {
-        Serial.printf("[MAV] Reject: not in MISSION_RECEIVING state\\n");
-        return;
-    }
+    if (mission_state != MISSION_RECEIVING) return;
 
     mavlink_mission_item_t item;
     mavlink_msg_mission_item_decode(&msg, &item);
 
     if (item.seq != current_upload_seq) {
-        Serial.printf("[MAV] SEQ MISMATCH: got %d, expected %d\\n", item.seq, current_upload_seq);
         mavlink_message_t ack;
         mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
                                      msg.sysid, msg.compid,
@@ -732,20 +726,15 @@ void MavlinkHandler::handleMissionItem(const mavlink_message_t& msg) {
     waypoint[item.seq].lat = (int32_t)(item.x * 1e7);
     waypoint[item.seq].lng = (int32_t)(item.y * 1e7);
     waypoint[item.seq].alt = (int32_t)(item.z * 100.0f);
-    Serial.printf("[MAV] WP %d (legacy): lat=%.7f lon=%.7f alt=%.1fm\\n", item.seq, item.x, item.y, item.z);
     current_upload_seq++;
 
     if (current_upload_seq < expected_count) {
-        //  FIX: Small delay between requests to avoid overwhelming Raspi
-        delayMicroseconds(500);
-        
         mavlink_message_t req;
         mavlink_msg_mission_request_pack(SYSTEM_ID, COMPONENT_ID, &req,
                                           msg.sysid, msg.compid,
                                           current_upload_seq,
                                           MAV_MISSION_TYPE_MISSION);
         mavSendAll(req);
-        Serial.printf("[MAV] Requesting mission item %d\\n", current_upload_seq);
     } else {
         wp_sum = expected_count;
         mavlink_message_t ack;
@@ -754,7 +743,6 @@ void MavlinkHandler::handleMissionItem(const mavlink_message_t& msg) {
                                      MAV_MISSION_ACCEPTED,
                                      MAV_MISSION_TYPE_MISSION);
         mavSendAll(ack);
-        Serial.printf("[MAV] Mission upload complete: %d waypoints\\n", wp_sum);
         mission_state = MISSION_IDLE;
         sendStatusText(MAV_SEVERITY_INFO, "Mission upload complete");
         if (saveWaypointsToEEPROM()) sendStatusText(MAV_SEVERITY_INFO, "Saved to EEPROM");
@@ -842,18 +830,31 @@ void MavlinkHandler::sendHeartbeat() {
 
 uint8_t MavlinkHandler::getBaseMode() const {
     switch (current) {
-        case ModeId::MANU: return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | MAV_MODE_FLAG_MANUAL_INPUT_ENABLED;
-        case ModeId::FBWA: return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | MAV_MODE_FLAG_MANUAL_INPUT_ENABLED | MAV_MODE_FLAG_STABILIZE_ENABLED;
-        case ModeId::AUTO: return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | MAV_MODE_FLAG_AUTO_ENABLED | MAV_MODE_FLAG_GUIDED_ENABLED;
+        case ModeId::MANU:
+            return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED |
+                   MAV_MODE_FLAG_MANUAL_INPUT_ENABLED;
+        case ModeId::FBWA:
+            return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED |
+                   MAV_MODE_FLAG_MANUAL_INPUT_ENABLED |
+                   MAV_MODE_FLAG_STABILIZE_ENABLED;
+        case ModeId::GUIDED:
+            return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED |
+                   MAV_MODE_FLAG_GUIDED_ENABLED |
+                   MAV_MODE_FLAG_STABILIZE_ENABLED;
+        case ModeId::AUTO:
+            return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED |
+                   MAV_MODE_FLAG_AUTO_ENABLED |
+                   MAV_MODE_FLAG_STABILIZE_ENABLED;
         default:           return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | MAV_MODE_FLAG_MANUAL_INPUT_ENABLED;
     }
 }
 
 uint32_t MavlinkHandler::getCustomMode() const {
     switch (current) {
-        case ModeId::MANU: return 0;
-        case ModeId::FBWA: return 5;
-        case ModeId::AUTO: return 10;
+        case ModeId::MANU:   return 0;
+        case ModeId::FBWA:   return 5;
+        case ModeId::GUIDED: return 4;
+        case ModeId::AUTO:   return 10;
         default:           return 0;
     }
 }
@@ -882,13 +883,13 @@ void MavlinkHandler::sendAttitude(float roll_rad, float pitch_rad, float yaw_rad
     mavSendAll(msg);
 }
 
-void MavlinkHandler::sendGpsRawInt(uint8_t fix_type, int32_t lat, int32_t lon,
+void MavlinkHandler::sendGpsRawInt(uint8_t fix_type, int32_t lat, int32_t lon, int32_t alt,
                                     uint16_t eph, uint16_t vel, uint16_t cog,
                                     uint8_t satellites_visible) {
     mavlink_message_t msg;
     uint64_t t_usec = (uint64_t)getMillis() * 1000ULL;
     mavlink_msg_gps_raw_int_pack(SYSTEM_ID, COMPONENT_ID, &msg,
-                                 t_usec, fix_type, lat, lon, 0,
+                                 t_usec, fix_type, lat, lon, alt,
                                  eph, 0, vel, cog, satellites_visible,
                                  0, 0, 0, 0, 0);
     mavSendAll(msg);
@@ -896,13 +897,30 @@ void MavlinkHandler::sendGpsRawInt(uint8_t fix_type, int32_t lat, int32_t lon,
 
 void MavlinkHandler::sendBatteryStatus(float voltage, int16_t current_amp, int8_t battery_remaining) {
     mavlink_message_t msg;
-    uint16_t voltage_mv = (uint16_t)(voltage * 1000.0f);
-    int16_t  current_ca = (current_amp == 0) ? -1 : (current_amp * 100);
 
-    mavlink_msg_battery_status_pack(SYSTEM_ID, COMPONENT_ID, &msg,
-                                    0, 0, 0, INT16_MAX,
-                                    &voltage_mv, current_ca,
-                                    -1, -1, battery_remaining, 0, 0);
+    uint16_t voltages[10];
+    voltages[0] = (uint16_t)(voltage * 1000.0f); // total voltage dari sensor kamu (Volt → mV)
+    for (uint8_t i = 1; i < 10; i++) {
+        voltages[i] = UINT16_MAX;                 // tidak ada sensor cell → abaikan
+    }
+
+    int16_t current_ca = (current_amp <= 0) ? -1 : (int16_t)(current_amp * 100);
+
+    mavlink_msg_battery_status_pack(
+        SYSTEM_ID, COMPONENT_ID, &msg,
+        0,
+        MAV_BATTERY_FUNCTION_ALL,
+        MAV_BATTERY_TYPE_LIPO,
+        INT16_MAX,                  // suhu = tidak diketahui
+        voltages,                   // ✅ total voltage masuk sini
+        current_ca,
+        -1,                         // consumed mAh = tidak diketahui
+        -1,                         // consumed hJ  = tidak diketahui
+        battery_remaining,
+        0,
+        MAV_BATTERY_CHARGE_STATE_OK
+    );
+
     mavSendAll(msg);
 }
 
@@ -939,6 +957,33 @@ void MavlinkHandler::notifyWaypointReached(uint16_t seq) {
     sendMissionItemReached(seq);
 }
 
+void MavlinkHandler::sendGlobalPositionInt() {
+    mavlink_message_t msg;
+
+    int32_t lat = (gepees.getStatus() >= 2) ? (int32_t)(gepees.latitude  * 1e7) : 0;
+    int32_t lon = (gepees.getStatus() >= 2) ? (int32_t)(gepees.longitude * 1e7) : 0;
+    int32_t alt_mm      = (int32_t)(baro.altitude * 1000.0f); // MSL  (mm)
+    int32_t rel_alt_mm  = (int32_t)(baro.altitude * 1000.0f); // relative (mm)
+
+    int16_t vx = 0, vy = 0, vz = 0;
+    uint16_t hdg = (uint16_t)(imu.yaw < 0 ? imu.yaw + 360 : imu.yaw) * 100; // cdeg
+
+    mavlink_msg_global_position_int_pack(
+        SYSTEM_ID, COMPONENT_ID, &msg,
+        getMillis(),    // time_boot_ms
+        lat,            // lat (degE7)
+        lon,            // lon (degE7)
+        alt_mm,         // alt MSL (mm)
+        rel_alt_mm,     // alt relative (mm)
+        vx,             // vx (cm/s)
+        vy,             // vy (cm/s)
+        vz,             // vz (cm/s)
+        hdg             // heading (cdeg)
+    );
+
+    mavSendAll(msg);
+}
+
 // ============================================================
 //  MAIN PERIODIC TASK
 // ============================================================
@@ -963,10 +1008,12 @@ void MavlinkHandler::mavlinkTask() {
         uint16_t cog_centi = 65535;
         if (gepees.getStatus() >= 2)
             cog_centi = (uint16_t)(gepees.getCourse() * 100.0f);
+        int32_t alt_mm = (int32_t)(baro.altitude * 1000.0f);
 
         sendGpsRawInt(gepees.getStatus(),
                       (int32_t)(gepees.latitude  * 1e7),
                       (int32_t)(gepees.longitude * 1e7),
+                        alt_mm,
                       (uint16_t)(gepees.hdop * 100),
                       (uint16_t)(gepees.speed_mps * 100),
                       imu.heading,
@@ -990,7 +1037,13 @@ void MavlinkHandler::mavlinkTask() {
     // Battery
     if (now - lastBattery >= BATTERY_MS) {
         lastBattery = now;
-        sendBatteryStatus(batt_v, 0, (int8_t)display_batt());
+
+        // Osilasi naik-turun 10.5V – 12.6V mengikuti waktu
+        float t         = millis() / 60000.0f;      // periode ~1 menit
+        float dummy_volt = 10.5f + 2.1f * (0.5f + 0.5f * cos(t * 3.14159f));
+        int8_t dummy_pct = (int8_t)((dummy_volt - 10.5f) / 2.1f * 100.0f);
+
+        sendBatteryStatus(dummy_volt, 0, dummy_pct);
     }
 
     // Nav controller
@@ -1000,6 +1053,11 @@ void MavlinkHandler::mavlinkTask() {
                                 atan2(0, 0), atan2(0, 0),
                                 auto_state.distance_next_wp,
                                 0, 0, 0);
+    }
+
+    if (now - lastGlobalPos >= GLOBAL_POS_MS) {
+        lastGlobalPos = now;
+        sendGlobalPositionInt();
     }
 
     // VFR HUD
@@ -1022,6 +1080,8 @@ void MavlinkHandler::mavlinkTask() {
     //         }
     //     }
     // }
+
+    pumpParamStream();
 }
 
 // ============================================================
@@ -1030,6 +1090,96 @@ void MavlinkHandler::mavlinkTask() {
 void notifyWaypointReached(uint16_t seq) {
     extern MavlinkHandler mavHandler;
     mavHandler.notifyWaypointReached(seq);
+}
+// ============================================================
+//  PARAM: Kirim satu PARAM_VALUE ke GCS
+// ============================================================
+void MavlinkHandler::sendParamValue(uint16_t index) {
+    if (index >= PARAM_COUNT) return;
+    mavlink_message_t msg;
+    mavlink_msg_param_value_pack(
+        SYSTEM_ID, COMPONENT_ID, &msg,
+        g_params[index].name,
+        *g_params[index].target,   // baca langsung dari fw_gain via pointer
+        MAV_PARAM_TYPE_REAL32,
+        PARAM_COUNT,
+        index
+    );
+    mavSendAll(msg);
+}
+
+// ============================================================
+//  PARAM: GCS minta semua param (klik Refresh di MP/QGC)
+// ============================================================
+void MavlinkHandler::handleParamRequestList(const mavlink_message_t& msg) {
+    param_send_index = 0;
+    Serial.printf("[PARAM] RequestList → stream %d params\n", PARAM_COUNT);
+}
+
+// ============================================================
+//  PARAM: GCS minta satu param by name atau index
+// ============================================================
+void MavlinkHandler::handleParamRequestRead(const mavlink_message_t& msg) {
+    mavlink_param_request_read_t req;
+    mavlink_msg_param_request_read_decode(&msg, &req);
+
+    int idx = -1;
+    if (req.param_index >= 0) {
+        idx = (req.param_index < PARAM_COUNT) ? req.param_index : -1;
+    } else {
+        idx = findParam(req.param_id);
+    }
+
+    if (idx >= 0) {
+        sendParamValue((uint16_t)idx);
+    } else {
+        sendStatusText(MAV_SEVERITY_WARNING, "PARAM NOT FOUND");
+    }
+}
+
+// ============================================================
+//  PARAM: GCS set nilai (tuning langsung dari MP/QGC)
+// ============================================================
+void MavlinkHandler::handleParamSet(const mavlink_message_t& msg) {
+    mavlink_param_set_t ps;
+    mavlink_msg_param_set_decode(&msg, &ps);
+
+    if (ps.target_system != SYSTEM_ID && ps.target_system != 0) return;
+
+    int idx = findParam(ps.param_id);
+    if (idx < 0) {
+        sendStatusText(MAV_SEVERITY_WARNING, "PARAM SET: NOT FOUND");
+        return;
+    }
+
+    // Clamp ke batas, langsung tulis ke fw_gain via pointer
+    float val = constrain(ps.param_value,
+                          g_params[idx].min_val,
+                          g_params[idx].max_val);
+    *g_params[idx].target = val;
+
+    saveParamsToEEPROM();
+
+    // Wajib echo balik PARAM_VALUE setelah SET
+    sendParamValue((uint16_t)idx);
+
+    char buf[50];
+    snprintf(buf, sizeof(buf), "SET %s=%.3f", g_params[idx].name, val);
+    sendStatusText(MAV_SEVERITY_INFO, buf);
+    Serial.printf("[PARAM] %s\n", buf);
+}
+
+// ============================================================
+//  PARAM: Pump stream — satu param per loop cycle
+//  Kalau semua dikirim sekaligus → buffer serial meluap
+// ============================================================
+void MavlinkHandler::pumpParamStream() {
+    if (param_send_index == UINT16_MAX) return;
+    if (param_send_index >= PARAM_COUNT) {
+        param_send_index = UINT16_MAX;   // selesai
+        return;
+    }
+    sendParamValue(param_send_index++);
 }
 
 #endif  // MAV_H

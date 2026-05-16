@@ -11,12 +11,13 @@
 #include <takeoff.h>
 #include <RaspberryPi_Telemtry.h>
 #include <Mavlink.h>
-#include <WP_EEPROM.h>
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"       // ← TAMBAH: untuk mutex
 #include "Mode_setup.h"
 #include "Mode_Manager.h"
+#include "Params.h"
+#include <WP_EEPROM.h>
  
 // ============================================================
 //  SERIAL ALIAS
@@ -29,7 +30,7 @@
 //  KONFIGURASI MODEL & TIMING (ms)
 // ============================================================
 #define CALIBRATE_MOTORS    false
-#define MODEL_UAV_FIXEDWING 1
+  
  
 #define IMU_time      5     // 200 Hz
 #define BARO_time     10    // 100 Hz
@@ -56,14 +57,15 @@ MavlinkHandler mavHandler;
  
 int    mode_phase  = 0;
 int    Mode        = 0;
-ModeId current     = ModeId::MANU;
+ModeId current     ;
 ModeManager modes;
-ModeId active_mode = ModeId::MANU;
+ModeId active_mode ;
 int    mode_now    = 0;
 int    prev_mode   = 0;
  
 int      line      = 0;
 int      milisawal = 0;
+float model_uav = MODEL_UAV_FIXEDWING;
  
 // ============================================================
 //  MUTEX — proteksi shared data antar task
@@ -186,10 +188,21 @@ void voltage(void *pvParameters){
 
 void controlThd(void *pvParameters){
     // Fixedwing VTOL mode set
-    modes.registerMode(&mMANU_FW);
-    modes.registerMode(&mFBWA_FW);
-    modes.registerMode(&mGUIDED_FW);
-    modes.registerMode(&mAUTO_FW);
+    int model = (int)(model_uav + 0.5f);
+
+    if (model == MODEL_UAV_FIXEDWING) {
+        modes.registerMode(&mMANU_FW);
+        modes.registerMode(&mFBWA_FW);
+        modes.registerMode(&mGUIDED_FW);
+        modes.registerMode(&mAUTO_FW);
+
+    } else if (model == MODEL_UAV_VTOL) {
+        modes.registerMode(&mMANU);
+        modes.registerMode(&mFBWA);
+        modes.registerMode(&mAUTO);
+        modes.registerMode(&mQHOV);
+        modes.registerMode(&mCOPT);
+    }
     for(;;){
     setup_mode();
     vTaskDelay(pdMS_TO_TICKS(CONTROL_time)); // Reduced delay for more frequent updates
@@ -284,13 +297,13 @@ void setup() {
  
     // --- Waypoint ---
     Serial.println("\n=== Waypoint Loading ===");
-    if (loadWaypointsFromEEPROM()) {
-        Serial.println("Using waypoints from EEPROM");
-    } else {
-        Serial.println("No EEPROM data, loading hardcoded waypoints");
+    initParams();
+    loadParamsFromEEPROM();
+    loadWaypointsFromEEPROM();
+    initParams();
+    if (!loadWaypointsFromEEPROM()){
         wp_setup();
     }
-    Serial.printf("Setup: %d waypoints loaded (MAVLink integrated)\n", wp_sum);
     printEEPROMStatus();
     Serial.println("========================\n");
  
@@ -336,7 +349,7 @@ void setup() {
     // xTaskCreate(airspeed,     "Airspeed",2048, NULL,  3,  &Task_Airspeed);// 20 Hz
     // xTaskCreate(voltage,      "Voltage", 2048, NULL,  2,  &Task_Voltage); // 10 Hz
     xTaskCreate(buzzerTask,   "Buzzer",  2048, NULL,  3,  &Task_Buzzer);  // 100 Hz
-    xTaskCreate(Print_task,   "Print",   4096, NULL,  2,  &Task_Print);   // 20 Hz — terendah
+   //  xTaskCreate(Print_task,   "Print",   4096, NULL,  2,  &Task_Print);   // 20 Hz — terendah
     // xTaskCreate(Print_To_Raspi,"Raspi", 4096, NULL,  1,  &Task_Raspi);
     // xTaskCreate(Print_telem,   "Telem", 4096, NULL,  1,  &Task_Telem);
  
