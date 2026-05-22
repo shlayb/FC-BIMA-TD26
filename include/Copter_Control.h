@@ -26,11 +26,11 @@ int min_yaw_corr =  -512;//-517
 //   {292600, -1300300,  1300300, -6283300}
 // };
 
-//WAHANA TD 2025
-const double A_invers[4][4] = {{1131000, 2381000, 2381000, 1166822},
-                               {1131000, 2381000, -2381000, -1166822},
-                               {1131000, -2381000, -2381000, 1166822},
-                               {1131000, -2381000, 2381000, -1166822}};  
+//WAHANA TD 2026 (dengan koreksi untuk motor CW/CCW) 
+const double A_invers[4][4] = {{9259000, 2314800, 2314800, 4807690},
+                               {9259000, 2314800, -2314800, -4807690},
+                               {9259000, -2314800, -2314800, 4807690},
+                               {9259000, -2314800, 2314800, -4807690}};
 
 // const double A_invers[4][4] = {
 //   {1,  20,  1,  1},
@@ -228,7 +228,7 @@ void copter_ControlFSFB(int16_t ch_r, int16_t ch_p, int16_t ch_y, int16_t ch_thr
 
     // ===== error sudut (cmd - meas) =====
     const float e_roll  = (-roll_cmd  + trim_roll)  - roll;
-    const float e_pitch = (pitch_cmd + trim_pitch) - (-pitch); // sesuai definisimu
+    const float e_pitch = (-pitch_cmd + trim_pitch) - (-pitch); // sesuai definisimu
 
     // ===== Stabilize (angle→rate) P-only =====
     roll_rate_sp  = constrain(e_roll  * gain.stab_roll_P,  -gain.max_rate_r,  gain.max_rate_r);
@@ -290,6 +290,19 @@ void copter_ControlFSFB(int16_t ch_r, int16_t ch_p, int16_t ch_y, int16_t ch_thr
 
     // ===== Throttle/altitude (punyamu) =====
     u1 = (-gain.k_alt * (alt_target/1.000f) + (-gain.k_z_velocity*(z_velocity)/100.0f)) / 10'000'000.0f; //0.0f;
+    Serial.print("P_roll :"); Serial.print(gain.rate_roll_P);
+    Serial.print(" I_roll :"); Serial.print(gain.rate_roll_I);
+    Serial.print(" D_roll :"); Serial.print(gain.rate_roll_D);
+    Serial.print(" | P_pitch :"); Serial.print(gain.rate_pitch_P);
+    Serial.print(" I_pitch :"); Serial.print(gain.rate_pitch_I);
+    Serial.print(" D_pitch :"); Serial.print(gain.rate_pitch_D);
+    Serial.print(" | P_yaw :"); Serial.print(gain.rate_yaw_P);
+    Serial.print(" I_yaw :"); Serial.print(gain.rate_yaw_I);
+    Serial.print(" D_yaw :"); Serial.print(gain.rate_yaw_D);
+    Serial.print(" | u1 (alt):"); Serial.print(u1);
+    Serial.print(" u2 (roll):"); Serial.print(u2);
+    Serial.print(" u3 (pitch):"); Serial.print(u3);
+    Serial.print(" u4 (yaw):"); Serial.println(u4);
 
     // ===== MIXER =====
     omega2[0] = (A_invers[0][0] * u1 + A_invers[0][1] * u2 + A_invers[0][2] * u3 + A_invers[0][3] * u4);

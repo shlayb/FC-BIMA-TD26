@@ -93,7 +93,7 @@
 
     // estimated climb rate (m/s)
     float _climb_rate;
-
+    
     /*
       a filter to estimate climb rate if we don't have it from the EKF
      */

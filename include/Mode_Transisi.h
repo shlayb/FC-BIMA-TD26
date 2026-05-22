@@ -62,7 +62,7 @@ unsigned long speed_reach_ms     = 0;
 
 // ================== KONFIG CEPAT ==================
 static const bool  USE_AIRSPEED       = false;
-static const float SPEED_MIN_MPS      = 12.0f;    // 12 UNTUK AIRSPEED // syarat minimal dianggap "cukup"
+static const float SPEED_MIN_MPS      = 16.0f;    // 12 UNTUK AIRSPEED // syarat minimal dianggap "cukup"
 static const float SPEED_RELAX_MPS    = 10.0f;    // hysteresis sederhana
 static const float ALPHA_BEFORE_SPEED = 0.60f;    // batasi pusher sebelum speed ok
 static const float ALPHA_BEFORE_SPEED_HOVER = 0.45f;  // hover will maintain 60% power (1.0 - 0.40)
@@ -110,11 +110,11 @@ void phase_transisi() {
   motor_loop(m1_pwm, m2_pwm, m3_pwm, m4_pwm);
 
   // Flywing
-  flywingcontrol.flywing_control_stabilize(ch_roll, ch_pitch, ch_yaw, ch_throttle,
-                                           imu.roll, imu.pitch, imu.yaw,
-                                           imu.gyro_y, imu.gyro_x, imu.gyro_z);
-  flywing_calcout();
-  flywing_servos_out(servo_L, servo_R);
+    fw_control.updateFBWA_FW(ch_roll, ch_pitch, ch_yaw, ch_throttle,
+                          imu.roll, imu.pitch, imu.yaw,
+                          imu.gyro_y, imu.gyro_x, imu.gyro_z);
+    fw_servos_out_fbwa();
+    plane_motors_out();
 
   // Pusher pakai mixer
   plane_motors_out_auto(PUSHER_PWM);

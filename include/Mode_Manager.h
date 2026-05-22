@@ -42,14 +42,14 @@ void setup_mode() {
                 current = ModeId::FBWA;
             }
         }
-        else if (mode_now == 3) {
+        else if (mode_now == 4) {
             if (active_mode != ModeId::GUIDED) {
                 modes.setMode(ModeId::GUIDED);
                 active_mode = ModeId::GUIDED;
                 current = ModeId::GUIDED;
             }
         }
-        else if (mode_now == 4) {
+        else if (mode_now == 3) {
             if (active_mode != ModeId::AUTO) {
                 modes.setMode(ModeId::AUTO);
                 active_mode = ModeId::AUTO;
@@ -110,7 +110,7 @@ void setup_mode() {
         }
 
         else if (mode_now == 4) {
-            want = ModeId::GUIDED;
+            want = ModeId::FBWA;
         }
 
         else {

@@ -208,7 +208,28 @@ void navigate() {
         const float wp_radius = 13.0f;
         acceptance_distance_m = turn_distance(wp_radius, auto_state.next_turn_angle);
     }
+    float prop = current_loc.line_path_proportion(prev_WP_loc, next_WP_loc);
+    bool hit_radius = auto_state.distance_next_wp <= acceptance_distance_m;
+    bool finish_line = current_loc.past_interval_finish_line(prev_WP_loc, next_WP_loc);
 
+    Serial.printf(
+        "flag_wp:%d display_wp:%d dist:%.2f acc:%.2f prop:%.3f hit_radius:%d finish:%d auto:%d ct:%d prev(%ld,%ld) next(%ld,%ld) curr(%ld,%ld)\n",
+        flag_wp,
+        display_wp(),
+        auto_state.distance_next_wp,
+        acceptance_distance_m,
+        prop,
+        hit_radius,
+        finish_line,
+        auto_navigation_mode,
+        auto_state.crosstrack,
+        prev_WP_loc.lat,
+        prev_WP_loc.lng,
+        next_WP_loc.lat,
+        next_WP_loc.lng,
+        current_loc.lat,
+        current_loc.lng
+    );
     if (auto_state.distance_next_wp <= acceptance_distance_m || current_loc.past_interval_finish_line(prev_WP_loc, next_WP_loc)) {
         if (auto_navigation_mode) {
             // Notify GCS that waypoint is reached

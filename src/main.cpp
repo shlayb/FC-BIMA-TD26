@@ -197,9 +197,9 @@ void controlThd(void *pvParameters){
         modes.registerMode(&mAUTO_FW);
 
     } else if (model == MODEL_UAV_VTOL) {
-        modes.registerMode(&mMANU);
-        modes.registerMode(&mFBWA);
-        modes.registerMode(&mAUTO);
+        modes.registerMode(&mMANU_FW);
+        modes.registerMode(&mFBWA_FW);
+        modes.registerMode(&mAUTO_FW);
         modes.registerMode(&mQHOV);
         modes.registerMode(&mCOPT);
     }
@@ -287,7 +287,7 @@ void setup() {
  
     // --- Serial ---
     SERIAL_USB.begin(115200);
-    SERIAL_UART.begin(460800);
+    SERIAL_UART.begin(57600);
     SERIAL_UART.addMemoryForRead(dma_rx2,  sizeof(dma_rx2));
     SERIAL_UART.addMemoryForWrite(dma_tx2, sizeof(dma_tx2));
     SERIAL_RASPI.begin(57600);
@@ -342,7 +342,7 @@ void setup() {
     xTaskCreate(updateIMU,    "IMU",     2048, NULL,  6,  &Task_IMU);     // 200 Hz — tertinggi
     xTaskCreate(controlThd,   "Control", 8192, NULL,  5,  &Task_Control); // 200 Hz — logic kompleks
     xTaskCreate(mavlink_print,"Mavlink", 8192, NULL,  5,  &Task_Mavlink); // 100 Hz real-time
-    // xTaskCreate(radio,        "Radio",   4096, NULL,  5,  &Task_Radio);   // 100 Hz
+    xTaskCreate(radio,        "Radio",   4096, NULL,  5,  &Task_Radio);   // 100 Hz
     xTaskCreate(GPS,          "GPS",     4096, NULL,  4,  &Task_GPS);     // 100 Hz — string parsing
     xTaskCreate(updateBARO,   "BARO",    2048, NULL,  3,  &Task_BARO);    // 100 Hz
     // xTaskCreate(fwRoll,       "FWRoll",  4096, NULL,  3,  &Task_FWRoll);  // 50 Hz

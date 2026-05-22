@@ -23,17 +23,17 @@
 // #define MOTOR_4_PIN  14
 
 //PIN FC BARU
-#define SERVO_AIL_L 11  //MTR 10
-#define SERVO_ELE 13    //MTR 11
-#define THROTTLE 1  //MTR  (Tidak dipakai)
-#define SERVO_RUD_L 3 //MTR 7
-#define SERVO_AIL_R 14 //MTR 6
-#define SERVO_RUD_R 5 //MTR 8
-#define SERVO_PAYLOAD 12 //MTR 5 
-#define MOTOR_1_PIN 31  //MTR 4  (Tidak dipakai)
-#define MOTOR_2_PIN 32 //FC pin DICEK LAGI (Tidak dipakai)
-#define MOTOR_3_PIN 33  //FC pin 9 (Tidak dipakai)
-#define MOTOR_4_PIN 13 //FC pin 10 (Tidak dipakai)
+#define SERVO_AIL_L 2  //MTR 1
+#define SERVO_ELE 4    //MTR 2
+#define THROTTLE 10  //MTR 4
+#define SERVO_RUD_L 6 //MTR 3
+#define SERVO_AIL_R 12 //MTR 5
+#define SERVO_RUD_R 14 //MTR 8
+#define SERVO_PAYLOAD 33 //MTR 5 
+#define MOTOR_1_PIN 3  //MTR 4  (Tidak dipakai)
+#define MOTOR_2_PIN 5 //FC pin DICEK LAGI (Tidak dipakai)
+#define MOTOR_3_PIN 9  //FC pin 9 (Tidak dipakai)
+#define MOTOR_4_PIN 11 //FC pin 10 (Tidak dipakai)
 
 // #define MTR_1_PIN 9  // MTR 9 (Throttle Kanan)
 // #define MTR_2_PIN 2  // MTR 1  (Throttle Kiri) - Changed from pin 6 to pin 2 (PWM capable, no conflicts)
@@ -539,8 +539,11 @@ void dual_motor_throttle_out_yaw() {
 void plane_motors_out_auto(float pwm) { //GA KEPAKE
     motor_pwm = pwm;
     motor_pwm = constrain(motor_pwm, MIN_THROTTLE_PWM, MAX_THROTTLE_PWM);
-    float yaw_diff = u_yaw_cmd * 100.0f;
-    // dual_motor_throttle_out_yaw();
+    if (arming) {
+        pusher.writeMicroseconds(motor_pwm);  // Dapatkan throttle dari kontrol otomatis
+    } else {
+        pusher.writeMicroseconds(988);
+    }
 }
 
 int32_t commanded_throttle; 

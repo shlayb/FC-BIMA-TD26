@@ -179,12 +179,19 @@ protected:
     update_speed_height();
     update_alt();
     updateAuto_FW();
-    // stabilize();
-    fw_control.updateAUTO_FW(imu.roll, imu.pitch, imu.yaw, imu.gyro_y, imu.gyro_x, imu.gyro_z);
+    stabilize();
+    servos_out_fbwa();
+    // fw_control.updateAUTO_FW(imu.roll, imu.pitch, imu.yaw, imu.gyro_y, imu.gyro_x, imu.gyro_z);
     payload_control_unified();  // Unified payload control (manual + auto)
-    fw_servos_out_fbwa();
+    // fw_servos_out_fbwa();
     plane_motors_out();
     // dual_motor_throttle_out_yaw();
+    Serial.print("demanded_pitch:"); Serial.print(get_pitch_demand());
+    Serial.print(" |nav_pitch_deg:"); Serial.print(nav_pitch_deg);
+    Serial.print(" |demanded_roll:"); Serial.print(nav_roll_cd()/100);
+    Serial.print(" |nav_roll_deg:"); Serial.print(nav_roll_deg);
+    Serial.print(" | U_roll:"); Serial.print(u_roll);
+    Serial.print(" | U_pitch:"); Serial.println(u_pitch);
     mode_phase = 3;
     current = ModeId::AUTO;
   }
@@ -218,7 +225,8 @@ protected:
     update_speed_height();
     update_alt();
     updateAuto_FW();
-    fw_control.updateAUTO_FW(imu.roll, imu.pitch, imu.yaw, imu.gyro_y, imu.gyro_x, imu.gyro_z);
+    //fw_control.updateAUTO_FW(imu.roll, imu.pitch, imu.yaw, imu.gyro_y, imu.gyro_x, imu.gyro_z);
+    Serial.println("ini mode GUIDED");
     payload_control_unified();
     fw_servos_out_fbwa();
     plane_motors_out();
