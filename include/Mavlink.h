@@ -1042,7 +1042,7 @@ void MavlinkHandler::mavlinkTask() {
     // Nav controller
     if (now - lastNavController >= NAV_CONTROLLER_MS) {
         lastNavController = now;
-        sendNavControllerOutput(imu.rad_roll, imu.rad_pitch,
+        sendNavControllerOutput(nav_roll_deg, nav_pitch_deg,
                                 atan2(0, 0), atan2(0, 0),
                                 auto_state.distance_next_wp,
                                 0, 0, 0);
@@ -1057,7 +1057,7 @@ void MavlinkHandler::mavlinkTask() {
     if (now - lastVfr >= VFR_MS) {
         lastVfr = now;
         float heading = (imu.yaw < 0) ? imu.yaw + 360 : imu.yaw;
-        sendVfrHud(arspd.v_ms, gepees.speed_mps, heading, baro.altitude, 0);
+        sendVfrHud(arspd.v_ms, gepees.speed_mps, heading, baro.altitude, baro.get_climb_rate());
     }
 
     // RC debug print - aktif agar bisa monitor RC di Serial Monitor
