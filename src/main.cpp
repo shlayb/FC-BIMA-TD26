@@ -195,6 +195,7 @@ void controlThd(void *pvParameters){
         modes.registerMode(&mFBWA_FW);
         modes.registerMode(&mGUIDED_FW);
         modes.registerMode(&mAUTO_FW);
+        modes.setMode(ModeId::MANU);
 
     } else if (model == MODEL_UAV_VTOL) {
         modes.registerMode(&mMANU_FW);
