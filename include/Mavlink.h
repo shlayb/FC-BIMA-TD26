@@ -88,6 +88,25 @@ enum MissionState { MISSION_IDLE, MISSION_RECEIVING };
 enum PortId { PORT_USB = 0, PORT_TLM = 1, PORT_RPI = 2 };
 
 // ============================================================
+//  HELPER: Check if msgid is mission-related
+// ============================================================
+static inline bool isMissionMessage(uint32_t msgid) {
+    switch (msgid) {
+        case MAVLINK_MSG_ID_MISSION_COUNT:
+        case MAVLINK_MSG_ID_MISSION_ITEM:
+        case MAVLINK_MSG_ID_MISSION_ITEM_INT:
+        case MAVLINK_MSG_ID_MISSION_REQUEST:
+        case MAVLINK_MSG_ID_MISSION_REQUEST_INT:
+        case MAVLINK_MSG_ID_MISSION_REQUEST_LIST:
+        case MAVLINK_MSG_ID_MISSION_ACK:
+        case MAVLINK_MSG_ID_MISSION_CLEAR_ALL:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// ============================================================
 //  MavlinkHandler CLASS
 // ============================================================
 class MavlinkHandler {
@@ -141,6 +160,7 @@ private:
     MissionState mission_state      = MISSION_IDLE;
     uint16_t     expected_count     = 0;
     uint16_t     current_upload_seq = 0;
+    PortId       current_port       = PORT_USB;  // Track which port sent current message
 
     // --------------------------------------------------------
     //  PRIVATE: Output helpers
@@ -148,6 +168,7 @@ private:
     void mavWrite(HardwareSerial& port, const mavlink_message_t& msg);
     void mavWriteUSB(Stream& port,      const mavlink_message_t& msg);
     void mavSendAll(const mavlink_message_t& msg);
+    void replyTarget(const mavlink_message_t& msg);  // Reply only to sender
 
     // --------------------------------------------------------
     //  PRIVATE: Telemetry senders
@@ -252,12 +273,22 @@ void MavlinkHandler::mavWriteUSB(Stream& port, const mavlink_message_t& msg) {
 }
 
 void MavlinkHandler::mavSendAll(const mavlink_message_t& msg) {
-    // CATATAN: Serial USB TIDAK dikirimi binary MAVLink agar Serial Monitor
-    // tetap bisa baca debug text (printRCStatus, Serial.printf, dsb).
-    // Aktifkan baris ini HANYA jika GCS (Mission Planner/QGC) konek via USB:
     mavWriteUSB(Serial, msg);
     mavWrite(Serial2, msg);   // Telemetry Radio / ELRS
-    mavWrite(Serial7, msg);   // RPi UART
+    
+    // Ke Raspberry Pi:
+    // - kalau tidak sedang upload mission: kirim normal
+    // - kalau sedang upload mission: hanya izinkan pesan mission
+    if (mission_state != MISSION_RECEIVING || isMissionMessage(msg.msgid)) {
+        mavWrite(Serial7, msg);   // RPi UART
+    }
+}
+
+void MavlinkHandler::replyTarget(const mavlink_message_t& msg) {
+    // Send hanya ke port yang kirim pesan
+    if (current_port == PORT_USB) mavWriteUSB(Serial, msg);
+    else if (current_port == PORT_TLM) mavWrite(Serial2, msg);
+    else if (current_port == PORT_RPI) mavWrite(Serial7, msg);
 }
 
 // ============================================================
@@ -424,6 +455,8 @@ void MavlinkHandler::handlePorts() {
 //  PROCESS AS FC — Routing perintah masuk ke handler
 // ============================================================
 void MavlinkHandler::processAsFC(const mavlink_message_t& msg, PortId from) {
+    current_port = from;  // Track mana port yang kirim pesan ini
+    
     switch (msg.msgid) {
         case MAVLINK_MSG_ID_COMMAND_LONG:          handleCommandLong(msg);         break;
         case MAVLINK_MSG_ID_STATUSTEXT:            handleStatusText(msg);          break;
@@ -447,6 +480,23 @@ void MavlinkHandler::processAsFC(const mavlink_message_t& msg, PortId from) {
 //  FORWARD TO OTHERS
 // ============================================================
 void MavlinkHandler::forwardToOthers(const mavlink_message_t& msg, PortId from) {
+    // Jangan forward pesan mission & param handshake (point-to-point)
+    switch (msg.msgid) {
+        case MAVLINK_MSG_ID_MISSION_COUNT:
+        case MAVLINK_MSG_ID_MISSION_ITEM:
+        case MAVLINK_MSG_ID_MISSION_ITEM_INT:
+        case MAVLINK_MSG_ID_MISSION_REQUEST:
+        case MAVLINK_MSG_ID_MISSION_REQUEST_INT:
+        case MAVLINK_MSG_ID_MISSION_REQUEST_LIST:
+        case MAVLINK_MSG_ID_MISSION_ACK:
+        case MAVLINK_MSG_ID_MISSION_CLEAR_ALL:
+        case MAVLINK_MSG_ID_PARAM_REQUEST_LIST:
+        case MAVLINK_MSG_ID_PARAM_REQUEST_READ:
+        case MAVLINK_MSG_ID_PARAM_SET:
+        case MAVLINK_MSG_ID_PARAM_VALUE:
+            return;
+    }
+    
     if (from != PORT_TLM) mavWrite(Serial2, msg);
     if (from != PORT_RPI) mavWrite(Serial7, msg);
 }
@@ -457,7 +507,7 @@ void MavlinkHandler::forwardToOthers(const mavlink_message_t& msg, PortId from) 
 void MavlinkHandler::sendCommandAck(uint16_t command, uint8_t result) {
     mavlink_message_t msg;
     mavlink_msg_command_ack_pack(SYSTEM_ID, COMPONENT_ID, &msg, command, result, 0, 0, 0, 0);
-    mavSendAll(msg);
+    replyTarget(msg);  // ACK hanya ke sender
 }
 
 void MavlinkHandler::sendStatusText(uint8_t severity, const char* text) {
@@ -528,13 +578,15 @@ void MavlinkHandler::handleCommandLong(const mavlink_message_t& msg) {
             uint32_t    custom_mode = (uint32_t)cmd.param2;
             int         new_mode   = 0;
             const char* mode_name  = "UNKNOWN";
+            ModeId      new_mode_id = ModeId::MANU;
 
-            // Fixedwing VTOL mapping:
+            // Fixedwing VTOL mapping (MUST MATCH Mode_Manager.h):
             // 0=MANUAL, 5=FBWA, 4=GUIDED, 10=AUTO
-            if      (custom_mode == 0)  { new_mode = 1; mode_name = "MANUAL"; }
-            else if (custom_mode == 5)  { new_mode = 2; mode_name = "FBWA"; }
-            else if (custom_mode == 4)  { new_mode = 3; mode_name = "GUIDED"; }
-            else if (custom_mode == 10) { new_mode = 4; mode_name = "AUTO"; }
+            // Mode_Manager expects: mode_now 1=MANU, 2=FBWA, 3=AUTO, 4=GUIDED
+            if      (custom_mode == 0)  { new_mode = 1; mode_name = "MANUAL"; new_mode_id = ModeId::MANU; }
+            else if (custom_mode == 5)  { new_mode = 2; mode_name = "FBWA"; new_mode_id = ModeId::FBWA; }
+            else if (custom_mode == 10) { new_mode = 3; mode_name = "AUTO"; new_mode_id = ModeId::AUTO; }  
+            else if (custom_mode == 4)  { new_mode = 4; mode_name = "GUIDED"; new_mode_id = ModeId::GUIDED; } 
             else {
                 result = MAV_RESULT_UNSUPPORTED;
                 sendStatusText(MAV_SEVERITY_WARNING, "MODE NOT SUPPORTED");
@@ -542,10 +594,35 @@ void MavlinkHandler::handleCommandLong(const mavlink_message_t& msg) {
             }
 
             mode_now = new_mode;
+            current = new_mode_id;  // ===== FIX: Sync current dengan ModeId =====
             result   = MAV_RESULT_ACCEPTED;
-            char msg_buf[50];
+            char msg_buf[80];
             snprintf(msg_buf, sizeof(msg_buf), "MODE: %s", mode_name);
-            sendStatusText(MAV_SEVERITY_INFO, msg_buf);
+            sendStatusText(MAV_SEVERITY_INFO, msg_buf);  
+            
+            // ===== IMMEDIATE HEARTBEAT: Sync GCS mode display langsung tanpa delay =====
+            mavlink_message_t hb_msg;
+            uint8_t system_status = arming ? MAV_STATE_ACTIVE : MAV_STATE_STANDBY;
+            uint8_t base_mode     = getBaseMode();
+            if (arming) base_mode |= MAV_MODE_FLAG_SAFETY_ARMED;
+            uint32_t custom_mode_out = getCustomMode();
+            
+            mavlink_msg_heartbeat_pack(SYSTEM_ID, COMPONENT_ID, &hb_msg,
+                                       MAV_TYPE_FIXED_WING,
+                                       MAV_AUTOPILOT_ARDUPILOTMEGA,
+                                       base_mode, custom_mode_out, system_status);
+            mavSendAll(hb_msg);
+            
+            // Reset timer untuk heartbeat selanjutnya
+            lastHb = millis();
+            // ==========================================================================
+            
+            // Debug info untuk tracking mode set
+            char debug_mode[100];
+            snprintf(debug_mode, sizeof(debug_mode), 
+                     "DEBUG SET_MODE: custom_mode_in=%u, new_mode=%d, current=(int)%d, mode_name=%s",
+                     custom_mode, new_mode, (int)current, mode_name);
+            sendStatusText(MAV_SEVERITY_INFO, debug_mode);
             break;
         }
 
@@ -563,7 +640,7 @@ void MavlinkHandler::handleMissionRequestList(const mavlink_message_t& msg) {
     mavlink_msg_mission_count_pack(SYSTEM_ID, COMPONENT_ID, &reply,
                                    msg.sysid, msg.compid, wp_sum,
                                    MAV_MISSION_TYPE_MISSION);
-    mavSendAll(reply);
+    replyTarget(reply);  // Hanya ke sender
     Serial.printf("Sent mission count: %d\n", wp_sum);
 }
 
@@ -583,7 +660,7 @@ void MavlinkHandler::handleMissionRequest(const mavlink_message_t& msg) {
         waypoint[request.seq].lng,
         waypoint[request.seq].alt / 100.0f,
         MAV_MISSION_TYPE_MISSION);
-    mavSendAll(reply);
+    replyTarget(reply);  // Hanya ke sender
     Serial.printf("Sent mission item %d\n", request.seq);
 
     if (request.seq == wp_sum - 1) {
@@ -592,7 +669,7 @@ void MavlinkHandler::handleMissionRequest(const mavlink_message_t& msg) {
                                      msg.sysid, msg.compid,
                                      MAV_MISSION_ACCEPTED,
                                      MAV_MISSION_TYPE_MISSION);
-        mavSendAll(ack);
+        replyTarget(ack);  // Hanya ke sender
     }
 }
 
@@ -612,7 +689,7 @@ void MavlinkHandler::handleMissionRequestInt(const mavlink_message_t& msg) {
         waypoint[request.seq].lng,
         waypoint[request.seq].alt / 100.0f,
         MAV_MISSION_TYPE_MISSION);
-    mavSendAll(reply);
+    replyTarget(reply);  // Hanya ke sender
     Serial.printf("Sent mission item int %d\n", request.seq);
 
     if (request.seq == wp_sum - 1) {
@@ -621,7 +698,7 @@ void MavlinkHandler::handleMissionRequestInt(const mavlink_message_t& msg) {
                                      msg.sysid, msg.compid,
                                      MAV_MISSION_ACCEPTED,
                                      MAV_MISSION_TYPE_MISSION);
-        mavSendAll(ack);
+        replyTarget(ack);  // Hanya ke sender
     }
 }
 
@@ -629,7 +706,11 @@ void MavlinkHandler::handleMissionCount(const mavlink_message_t& msg) {
     mavlink_mission_count_t count_msg;
     mavlink_msg_mission_count_decode(&msg, &count_msg);
     expected_count = count_msg.count;
-    Serial.printf("Receiving mission count: %d\n", expected_count);
+    
+    // DEBUG: Mission count received
+    char debug_count[100];
+    snprintf(debug_count, sizeof(debug_count), "DEBUG WP: MISSION_COUNT received, expecting %d WP", expected_count);
+    sendStatusText(MAV_SEVERITY_INFO, debug_count);
 
     if (expected_count > MAX_MISSION) {
         mavlink_message_t ack;
@@ -637,7 +718,7 @@ void MavlinkHandler::handleMissionCount(const mavlink_message_t& msg) {
                                      msg.sysid, msg.compid,
                                      MAV_MISSION_ERROR,
                                      MAV_MISSION_TYPE_MISSION);
-        mavSendAll(ack);
+        replyTarget(ack);  // Hanya ke sender
         sendStatusText(MAV_SEVERITY_WARNING, "Mission count too large");
         return;
     }
@@ -649,14 +730,26 @@ void MavlinkHandler::handleMissionCount(const mavlink_message_t& msg) {
     mavlink_msg_mission_request_int_pack(SYSTEM_ID, COMPONENT_ID, &req,
                                           msg.sysid, msg.compid, 0,
                                           MAV_MISSION_TYPE_MISSION);
-    mavSendAll(req);
+    replyTarget(req);  // Hanya ke sender
+    
+    sendStatusText(MAV_SEVERITY_INFO, "DEBUG WP: Requesting seq=0");
 }
 
 void MavlinkHandler::handleMissionItemInt(const mavlink_message_t& msg) {
-    if (mission_state != MISSION_RECEIVING) return;
+    if (mission_state != MISSION_RECEIVING) {
+        char debug_state[80];
+        snprintf(debug_state, sizeof(debug_state), "DEBUG WP: MISSION_ITEM_INT ignored, mission_state=%d (not RECEIVING)", mission_state);
+        sendStatusText(MAV_SEVERITY_WARNING, debug_state);
+        return;
+    }
 
     mavlink_mission_item_int_t item;
     mavlink_msg_mission_item_int_decode(&msg, &item);
+
+    // DEBUG: Item received
+    char debug_item[100];
+    snprintf(debug_item, sizeof(debug_item), "DEBUG WP: Received seq=%d (expected seq=%d)", item.seq, current_upload_seq);
+    sendStatusText(MAV_SEVERITY_INFO, debug_item);
 
     if (item.seq != current_upload_seq) {
         mavlink_message_t ack;
@@ -664,7 +757,7 @@ void MavlinkHandler::handleMissionItemInt(const mavlink_message_t& msg) {
                                      msg.sysid, msg.compid,
                                      MAV_MISSION_INVALID_SEQUENCE,
                                      MAV_MISSION_TYPE_MISSION);
-        mavSendAll(ack);
+        replyTarget(ack);  // Hanya ke sender
         mission_state = MISSION_IDLE;
         sendStatusText(MAV_SEVERITY_WARNING, "Invalid mission sequence");
         return;
@@ -673,7 +766,6 @@ void MavlinkHandler::handleMissionItemInt(const mavlink_message_t& msg) {
     waypoint[item.seq].lat = item.x;
     waypoint[item.seq].lng = item.y;
     waypoint[item.seq].alt = (int32_t)(item.z * 100.0f);
-    Serial.printf("WP %d: lat=%d lon=%d alt=%.1fm\n", item.seq, item.x, item.y, item.z);
 
     current_upload_seq++;
 
@@ -683,15 +775,24 @@ void MavlinkHandler::handleMissionItemInt(const mavlink_message_t& msg) {
                                               msg.sysid, msg.compid,
                                               current_upload_seq,
                                               MAV_MISSION_TYPE_MISSION);
-        mavSendAll(req);
+        replyTarget(req);  // Hanya ke sender
+        
+        // DEBUG: Next item requested
+        char debug_req[80];
+        snprintf(debug_req, sizeof(debug_req), "DEBUG WP: Requesting seq=%d", current_upload_seq);
+        sendStatusText(MAV_SEVERITY_INFO, debug_req);
     } else {
         wp_sum = expected_count;
+        char debug_msg[80];
+        snprintf(debug_msg, sizeof(debug_msg), "DEBUG WP: All %d items received, sending ACK", wp_sum);
+        sendStatusText(MAV_SEVERITY_INFO, debug_msg);
+        
         mavlink_message_t ack;
         mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
                                      msg.sysid, msg.compid,
                                      MAV_MISSION_ACCEPTED,
                                      MAV_MISSION_TYPE_MISSION);
-        mavSendAll(ack);
+        replyTarget(ack);  // Hanya ke sender
         mission_state = MISSION_IDLE;
         sendStatusText(MAV_SEVERITY_INFO, "Mission upload complete");
         if (saveWaypointsToEEPROM()) sendStatusText(MAV_SEVERITY_INFO, "Saved to EEPROM");
@@ -710,7 +811,7 @@ void MavlinkHandler::handleMissionItem(const mavlink_message_t& msg) {
                                      msg.sysid, msg.compid,
                                      MAV_MISSION_INVALID_SEQUENCE,
                                      MAV_MISSION_TYPE_MISSION);
-        mavSendAll(ack);
+        replyTarget(ack);  // Hanya ke sender
         mission_state = MISSION_IDLE;
         sendStatusText(MAV_SEVERITY_WARNING, "Invalid mission sequence");
         return;
@@ -727,15 +828,19 @@ void MavlinkHandler::handleMissionItem(const mavlink_message_t& msg) {
                                           msg.sysid, msg.compid,
                                           current_upload_seq,
                                           MAV_MISSION_TYPE_MISSION);
-        mavSendAll(req);
+        replyTarget(req);  // Hanya ke sender
     } else {
         wp_sum = expected_count;
+        char debug_msg[80];
+        snprintf(debug_msg, sizeof(debug_msg), "Mission (legacy) uploaded: %d WP", wp_sum);
+        sendStatusText(MAV_SEVERITY_INFO, debug_msg);
+        
         mavlink_message_t ack;
         mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
                                      msg.sysid, msg.compid,
                                      MAV_MISSION_ACCEPTED,
                                      MAV_MISSION_TYPE_MISSION);
-        mavSendAll(ack);
+        replyTarget(ack);  // Hanya ke sender
         mission_state = MISSION_IDLE;
         sendStatusText(MAV_SEVERITY_INFO, "Mission upload complete");
         if (saveWaypointsToEEPROM()) sendStatusText(MAV_SEVERITY_INFO, "Saved to EEPROM");
@@ -745,13 +850,21 @@ void MavlinkHandler::handleMissionItem(const mavlink_message_t& msg) {
 void MavlinkHandler::handleMissionClearAll(const mavlink_message_t& msg) {
     wp_sum = 0;
     clearWaypointEEPROM();
+    
+    // ===== FIX: Reset waypoint index agar misi baru dimulai dari WP 0 =====
+    flag_wp = -1;
+    flag_takeoff = -1;
+    // =====================================================================
+    
+    // DEBUG: Mission clear received and ACK sent
+    sendStatusText(MAV_SEVERITY_INFO, "DEBUG WP: MISSION_CLEAR received, sending ACK");
 
     mavlink_message_t ack;
     mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
                                  msg.sysid, msg.compid,
                                  MAV_MISSION_ACCEPTED,
                                  MAV_MISSION_TYPE_MISSION);
-    mavSendAll(ack);
+    replyTarget(ack);  // Hanya ke sender
     sendStatusText(MAV_SEVERITY_INFO, "Missions cleared");
 }
 
@@ -813,11 +926,14 @@ void MavlinkHandler::sendHeartbeat() {
     uint8_t system_status = arming ? MAV_STATE_ACTIVE : MAV_STATE_STANDBY;
     uint8_t base_mode     = getBaseMode();
     if (arming) base_mode |= MAV_MODE_FLAG_SAFETY_ARMED;
+    
+    uint32_t custom_mode_out = getCustomMode();
 
     mavlink_msg_heartbeat_pack(SYSTEM_ID, COMPONENT_ID, &msg,
                                MAV_TYPE_FIXED_WING,
                                MAV_AUTOPILOT_ARDUPILOTMEGA,
-                               base_mode, getCustomMode(), system_status);
+                               base_mode, custom_mode_out, system_status);
+    
     mavSendAll(msg);
 }
 
