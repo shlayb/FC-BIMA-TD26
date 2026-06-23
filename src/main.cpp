@@ -11,6 +11,7 @@
 #include <takeoff.h>
 #include <RaspberryPi_Telemtry.h>
 #include <Mavlink.h>
+#include <airspeed.h>
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"       // ← TAMBAH: untuk mutex
@@ -319,6 +320,7 @@ void setup() {
     remote_setup();
     setup_fuzzy_roll();
     init_voltage();
+    arspd.initAirspeed();  // Init I2C airspeed sensor
     buzzer.init();
  
     if (CALIBRATE_MOTORS) calibrateMotor();
@@ -347,7 +349,7 @@ void setup() {
     xTaskCreate(GPS,          "GPS",     4096, NULL,  4,  &Task_GPS);     // 100 Hz — string parsing
     xTaskCreate(updateBARO,   "BARO",    2048, NULL,  3,  &Task_BARO);    // 100 Hz
     // xTaskCreate(fwRoll,       "FWRoll",  4096, NULL,  3,  &Task_FWRoll);  // 50 Hz
-    // xTaskCreate(airspeed,     "Airspeed",2048, NULL,  3,  &Task_Airspeed);// 20 Hz
+    xTaskCreate(airspeed,     "Airspeed",2048, NULL,  3,  &Task_Airspeed);// 20 Hz
     // xTaskCreate(voltage,      "Voltage", 2048, NULL,  2,  &Task_Voltage); // 10 Hz
     xTaskCreate(buzzerTask,   "Buzzer",  2048, NULL,  3,  &Task_Buzzer);  // 100 Hz
    //  xTaskCreate(Print_task,   "Print",   4096, NULL,  2,  &Task_Print);   // 20 Hz — terendah

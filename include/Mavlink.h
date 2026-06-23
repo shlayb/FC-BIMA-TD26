@@ -150,7 +150,8 @@ private:
     unsigned long lastNavController = 0;
     unsigned long lastAlert         = 0;
     unsigned long lastRcPrint       = 0;
-    unsigned long lastGlobalPos = 0;
+    unsigned long lastGlobalPos     = 0;
+    unsigned long lastWpCount       = 0;  // Timer untuk mengirim total WP ke RPI
 
     // --- MAVLink buffers ---
     mavlink_status_t  st_usb, st_tlm, st_rpi;
@@ -191,6 +192,7 @@ private:
                     float altitude, float climb_rate);
     void sendMissionItemReached(uint16_t seq);
     void sendGlobalPositionInt();
+    void sendMissionCountToRPI();  // Kirim total WP ke RPI secara berkala
 
     uint8_t  getBaseMode()   const;
     uint32_t getCustomMode() const;
@@ -1093,6 +1095,14 @@ void MavlinkHandler::sendGlobalPositionInt() {
     mavSendAll(msg);
 }
 
+void MavlinkHandler::sendMissionCountToRPI() {
+    mavlink_message_t msg;
+    mavlink_msg_mission_count_pack(SYSTEM_ID, COMPONENT_ID, &msg,
+                                   0, MAV_COMP_ID_ALL, wp_sum,
+                                   MAV_MISSION_TYPE_MISSION);
+    mavWrite(Serial7, msg);
+}
+
 // ============================================================
 //  MAIN PERIODIC TASK
 // ============================================================
@@ -1174,6 +1184,12 @@ void MavlinkHandler::mavlinkTask() {
         lastVfr = now;
         float heading = (imu.yaw < 0) ? imu.yaw + 360 : imu.yaw;
         sendVfrHud(arspd.v_ms, gepees.speed_mps, heading, baro.altitude, baro.get_climb_rate());
+    }
+
+    // Kirim total WP count ke RPI setiap 1 detik
+    if (now - lastWpCount >= 1000) {
+        lastWpCount = now;
+        sendMissionCountToRPI();
     }
 
     // RC debug print - aktif agar bisa monitor RC di Serial Monitor

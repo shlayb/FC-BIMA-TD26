@@ -28,8 +28,8 @@
 #define THROTTLE 10  //MTR 4
 #define SERVO_RUD_L 6 //MTR 3
 #define SERVO_AIL_R 12 //MTR 5
-#define SERVO_RUD_R 14 //MTR 8
-#define SERVO_PAYLOAD 33 //MTR 5 
+#define SERVO_RUD_R 33 //MTR 8
+#define SERVO_PAYLOAD 14 //MTR 6
 #define MOTOR_1_PIN 3  //MTR 4  (Tidak dipakai)
 #define MOTOR_2_PIN 5 //FC pin DICEK LAGI (Tidak dipakai)
 #define MOTOR_3_PIN 9  //FC pin 9 (Tidak dipakai)

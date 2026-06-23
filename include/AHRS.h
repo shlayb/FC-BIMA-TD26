@@ -28,7 +28,6 @@
 #include <AP_Math.h>
 #include <Arduino.h>
 #include <Locations.h>
-
 #include "Barometer.h"
 #include "NavEKF.h"
 #include "airspeed.h"

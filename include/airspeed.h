@@ -103,3 +103,4 @@ void Airspeed::updateAirspeed() {
     v_kmh = v_ms * 3.6;
     prspsi = press_psi * 13789.5144;
 }
+
