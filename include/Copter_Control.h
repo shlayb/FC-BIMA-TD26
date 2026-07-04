@@ -56,10 +56,10 @@ float delta_calc_time;
 float alt_ref, heading_now, last_alt, last_heading, alt_now;
 float alt_target, z_velocity;
 float roll_cmd, pitch_cmd, yaw_cmd;
-float min_roll  = -15.0f;
-float max_roll  =  15.0f;
-float min_pitch = -35.0f;
-float max_pitch =  35.0f;
+float min_roll  = -7.0f;
+float max_roll  =  7.0f;
+float min_pitch = -10.0f;
+float max_pitch =  10.0f;
 float min_yaw   = -35.0f;
 float max_yaw   =  35.0f;
 int   PID_max_roll  =  400;
@@ -82,6 +82,7 @@ float tesdata;
 
 float tesgz,tesgx;
 
+
 // ===================== GAINS =====================
 struct gains {
     float k_alt        = 6.50f;
@@ -92,24 +93,24 @@ struct gains {
 
     // Stabilize (angle -> rate), P-only (
     float stab_roll_P  = 4.5f;
-    float stab_pitch_P = 4.0f;
-    float stab_yaw_P   = 5.0f;
+    float stab_pitch_P = 3.5f;
+    float stab_yaw_P   = 4.0f;
 
     // Rate PID + Imax
-    float rate_roll_P    = 5.00f;
-    float rate_roll_I    = 0.01f;
-    float rate_roll_D    = 0.05f;
+    float rate_roll_P    = 8.00f;
+    float rate_roll_I    = 0.00f;
+    float rate_roll_D    = 0.30f;
     float rate_roll_IMAX = 500.0f;
 
-    float rate_pitch_P    = 5.0f;
-    float rate_pitch_I    = 0.01f;
-    float rate_pitch_D    = 0.05f;
+    float rate_pitch_P    = 8.00f;
+    float rate_pitch_I    = 0.00f;
+    float rate_pitch_D    = 0.30f;
     float rate_pitch_IMAX = 500.0f;
 
-    float rate_yaw_P      = 30.00f; //20.0f;
-    float rate_yaw_I      = 0.01f; //0.01f;
-    float rate_yaw_D      = 0.05f; //0.05f;
-    float rate_yaw_IMAX   = 8.0f;
+    float rate_yaw_P      = 10.00f; //20.0f;
+    float rate_yaw_I      = 0.00f; //0.01f;
+    float rate_yaw_D      = 0.00f; //0.05f;
+    float rate_yaw_IMAX   = 500.0f;
 
     // batas rate target (deg/s)
     float max_rate_r = 220.0f;
