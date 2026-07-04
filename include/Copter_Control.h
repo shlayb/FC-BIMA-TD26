@@ -56,8 +56,8 @@ float delta_calc_time;
 float alt_ref, heading_now, last_alt, last_heading, alt_now;
 float alt_target, z_velocity;
 float roll_cmd, pitch_cmd, yaw_cmd;
-float min_roll  = -7.0f;
-float max_roll  =  7.0f;
+float min_roll  = -10.0f;
+float max_roll  =  10.0f;
 float min_pitch = -10.0f;
 float max_pitch =  10.0f;
 float min_yaw   = -35.0f;
@@ -107,7 +107,7 @@ struct gains {
     float rate_pitch_D    = 0.30f;
     float rate_pitch_IMAX = 500.0f;
 
-    float rate_yaw_P      = 10.00f; //20.0f;
+    float rate_yaw_P      = 9.00f; //20.0f;
     float rate_yaw_I      = 0.00f; //0.01f;
     float rate_yaw_D      = 0.00f; //0.05f;
     float rate_yaw_IMAX   = 500.0f;
