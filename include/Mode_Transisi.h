@@ -58,7 +58,7 @@ const float   RAMP_TIME          = 1.0f;     // s
 
 // latch speed sederhana
 bool          latched_speed_ok   = false;
-unsigned long speed_reach_ms     = 0;
+// speed_reach_ms: tidak dipakai (dead variable) — timeout pakai trans_start_ms
 
 // ================== KONFIG CEPAT ==================
 static const bool  USE_AIRSPEED       = false;
@@ -71,6 +71,7 @@ static const float RAMP_TIME_PUSHER_FW = 2.0f;    // Faster ramp for pusher
 static const float RAMP_TIME_HOVER_FW = 5.0f;     // Slower ramp for hover
 static const float RAMP_TIME_PUSHER_MC = 1.0f;    // Faster ramp for pusher
 static const float RAMP_TIME_HOVER_MC = 1.0f;     // Slower ramp for hover
+static const float FORCE_TRANSITION_SEC = 5.0f;   // force transisi ke FBWA setelah N detik
 
 // ================== API MULAI TRANSISI ==================
 void start_transition_to_fw(){
@@ -82,7 +83,6 @@ void start_transition_to_fw(){
   alpha_hover            = 0.0f;
   alpha_pusher           = 0.0f;
   latched_speed_ok   = false;
-  speed_reach_ms     = 0;
   // Serial.println("Mulai transisi MC -> FW");
 }
 
@@ -194,7 +194,7 @@ void update_transition(){
     const float v_now = ahrs.groundspeed;
     if (!latched_speed_ok && v_now >= SPEED_MIN_MPS){
       latched_speed_ok = true;
-      speed_reach_ms = millis();
+      // speed_reach_ms = millis();
     }
     if (latched_speed_ok && v_now < SPEED_RELAX_MPS){
       latched_speed_ok = false; // lepas latch bila turun jauh (hysteresis ringan)
@@ -225,15 +225,20 @@ void update_transition(){
     cek_alpha_hover = mix_hover;
 
 
-    if (alpha_hover >= 1.0f && alpha_pusher >= 1.0f){
+    // Kondisi 1: ramp selesai normal (speed threshold terpenuhi)
+    // Kondisi 2: force transition — sudah >= FORCE_TRANSITION_SEC detik
+    bool force_timeout = (t >= FORCE_TRANSITION_SEC);
+
+    if ((alpha_hover >= 1.0f && alpha_pusher >= 1.0f) || force_timeout){
       is_transitioning = false;
       PUSHER_PWM = PUSHER_PWM_MIN;
       QUAD_PWM_THR = HOVER_PWM_MIN;
       m1_pwm = m2_pwm = m3_pwm = m4_pwm = HOVER_PWM_MIN;
-      motor_loop(m1_pwm, m2_pwm, m3_pwm, m4_pwm); 
+      motor_loop(m1_pwm, m2_pwm, m3_pwm, m4_pwm);
       plane_motors_out_auto(PUSHER_PWM);
       modes.setMode(ModeId::FBWA); active_mode = ModeId::FBWA;
-      // Serial.println("Selesai: masuk FW");
+      // if (force_timeout) Serial.println("[FORCE] Timeout 5s → FBWA");
+      // else               Serial.println("Selesai: masuk FW");
     }
   } else {
     // float mix_hover = alpha_hover;
