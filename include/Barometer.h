@@ -28,6 +28,7 @@ public:
 
     void readPressure(bool compensation);
     void readTemperature(bool compensation);
+    void determineGroundPress(uint8_t n);
     
 private:
     double sea_level;
@@ -46,7 +47,6 @@ private:
 
     const float ALT_DROP_THRESHOLD = 0.001;
 
-    void determineGroundPress(uint8_t n);
     void hypsometricEquation(float current_press);
     void calcAltitude(double press, double reference_press);
     void calcSeaLevel(double press, double relative_alt);
@@ -220,4 +220,10 @@ void Barometer::update_baro() {
     //     float randomOffset = (float)(random(0, 1000)) / 100.0f; // 0.00 to 10.00
     //     altitude = 110.0f + randomOffset; // 110.0 to 120.0
     // }
+}
+
+extern Barometer baro;
+inline bool zeroAltitudePreflight() {
+    baro.determineGroundPress(15);
+    return true;
 }

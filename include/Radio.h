@@ -11,6 +11,7 @@ bfs::SbusData data;
 bool signal_lost = false;
 uint16_t ch_roll, ch_pitch, ch_throttle, ch_yaw, ch_mode, ch_mode_backup, ch_vehicle_mode, ch5, ch6, ch7, ch8;
 bool arming;
+bool rpi_mode_lock = false;
 
 // enum MODE
 // {

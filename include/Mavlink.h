@@ -312,26 +312,38 @@ void MavlinkHandler::applyRcToGlobals(uint16_t c1, uint16_t c2, uint16_t c3,
     apply(ch_throttle, c3);
     apply(ch_yaw,      c4);
     apply(ch5,         c5);
-    arming = ch5 > 1500 ? 1 : 0; // Contoh: channel 5 sebagai switch arming
+    if (!rpi_mode_lock) {
+        arming = ch5 > 1500 ? 1 : 0; // Contoh: channel 5 sebagai switch arming
+    }
     apply(ch_mode,         c6);
     apply(ch_mode_backup,         c7);
 
-
-            if (ch_mode < 1000) {  // Channel 6 low - Regular modes (1,2,3)
-            if (ch_mode_backup <= 1000) {
-                mode_now = 1;  // Mode 1: Both channels low
-            } else if (ch_mode_backup > 1000 && ch_mode_backup <= 1512) {
-                mode_now = 2;  // Mode 2: Ch7 middle
-            } else if (ch_mode_backup >= 1512) {
-                mode_now = 3;  // Mode 3: Ch7 high
-            }
-        } else {  // Channel 6 middle/high - Special modes (4,5)
-            if (ch_mode > 1000 && ch_mode <= 1512 && ch_mode_backup >= 1512) {
-                mode_now = 4;  // Mode 4: Ch6 middle, Ch7 high
-            } else if (ch_mode >= 1512 && ch_mode_backup >= 1512) {
-                mode_now = 5;  // Mode 5: Both channels high
-            }
+    int remote_want = mode_now;
+    if (ch_mode < 1000) {  // Channel 6 low - Regular modes (1,2,3)
+        if (ch_mode_backup <= 1000) {
+            remote_want = 1;  // Mode 1: Both channels low
+        } else if (ch_mode_backup > 1000 && ch_mode_backup <= 1512) {
+            remote_want = 2;  // Mode 2: Ch7 middle
+        } else if (ch_mode_backup >= 1512) {
+            remote_want = 3;  // Mode 3: Ch7 high (QHOV emergency)
         }
+    } else {  // Channel 6 middle/high - Special modes (4,5)
+        if (ch_mode > 1000 && ch_mode <= 1512 && ch_mode_backup >= 1512) {
+            remote_want = 4;  // Mode 4: Ch6 middle, Ch7 high
+        } else if (ch_mode >= 1512 && ch_mode_backup >= 1512) {
+            remote_want = 5;  // Mode 5: Both channels high
+        }
+    }
+
+    if (rpi_mode_lock) {
+        // Hard override: pos 3 = QHOV emergency, SELALU diizinkan
+        if (remote_want == 3) {
+            rpi_mode_lock = false;
+            mode_now = 3;
+        }
+    } else {
+        mode_now = remote_want;
+    }
     apply(ch_vehicle_mode,         c8);
 
     g_rcStatus.valid        = true;
@@ -582,16 +594,22 @@ void MavlinkHandler::handleCommandLong(const mavlink_message_t& msg) {
             const char* mode_name  = "UNKNOWN";
             ModeId      new_mode_id = ModeId::MANU;
 
-            // Fixedwing VTOL mapping (MUST MATCH Mode_Manager.h):
-            // 0=MANUAL, 5=FBWA, 4=GUIDED, 10=AUTO
-            // Mode_Manager expects: mode_now 1=MANU, 2=FBWA, 3=AUTO, 4=GUIDED
-            if      (custom_mode == 0)  { new_mode = 1; mode_name = "MANUAL"; new_mode_id = ModeId::MANU; }
-            else if (custom_mode == 5)  { new_mode = 2; mode_name = "FBWA"; new_mode_id = ModeId::FBWA; }
-            else if (custom_mode == 10) { new_mode = 3; mode_name = "AUTO"; new_mode_id = ModeId::AUTO; }  
-            else if (custom_mode == 4)  { new_mode = 4; mode_name = "GUIDED"; new_mode_id = ModeId::GUIDED; } 
+            // VTOL mapping (MUST MATCH Mode_Manager.h):
+            // custom  0 → mode_now 1 → TKOF / transisi MC
+            // custom  5 → mode_now 2 → transisi FW / FBWA
+            // custom 10 → mode_now 3 → QHOV (pilot emergency hover)
+            // custom 12 → mode_now 6 → AUTO  (RPi gunakan ini untuk auto)
+            // custom 15 → mode_now 4 → GUIDED
+            if      (custom_mode == 0)  { new_mode = 1; mode_name = "COPT"; new_mode_id = ModeId::COPT; }
+            else if (custom_mode == 5)  { new_mode = 2; mode_name = "FW-TRANS"; new_mode_id = ModeId::FBWA; }
+            else if (custom_mode == 10) { new_mode = 3; mode_name = "QHOV"; new_mode_id = ModeId::QHOV; }
+            else if (custom_mode == 12) { new_mode = 6; mode_name = "AUTO"; new_mode_id = ModeId::AUTO; }
+            else if (custom_mode == 15 || custom_mode == 4) { new_mode = 4; mode_name = "GUIDED"; new_mode_id = ModeId::GUIDED; }
             else {
                 result = MAV_RESULT_UNSUPPORTED;
-                sendStatusText(MAV_SEVERITY_WARNING, "MODE NOT SUPPORTED");
+                char mode_text[50];
+                snprintf(mode_text, sizeof(mode_text), "MODE NOT SUPPORTED cm=%lu", (unsigned long)custom_mode);
+                sendStatusText(MAV_SEVERITY_WARNING, mode_text);
                 break;
             }
 
@@ -622,9 +640,65 @@ void MavlinkHandler::handleCommandLong(const mavlink_message_t& msg) {
             // Debug info untuk tracking mode set
             char debug_mode[100];
             snprintf(debug_mode, sizeof(debug_mode), 
-                     "DEBUG SET_MODE: custom_mode_in=%u, new_mode=%d, current=(int)%d, mode_name=%s",
-                     custom_mode, new_mode, (int)current, mode_name);
+                     "DEBUG SET_MODE: custom_mode_in=%lu, new_mode=%d, current=(int)%d, mode_name=%s",
+                     (unsigned long)custom_mode, new_mode, (int)current, mode_name);
             sendStatusText(MAV_SEVERITY_INFO, debug_mode);
+            break;
+        }
+
+        // ============================================================
+        //  MAV_CMD_USER_1 — RPi mode lock control
+        //  param1 = 1.0 → aktifkan lock (RPi berkuasa, remote diabaikan)
+        //  param1 = 0.0 → lepas lock (remote kembali berkuasa)
+        // ============================================================
+        case MAV_CMD_USER_1: {
+            if (cmd.param1 >= 0.5f) {
+                rpi_mode_lock = true;
+                result = MAV_RESULT_ACCEPTED;
+                sendStatusText(MAV_SEVERITY_INFO, "RPI LOCK ON");
+            } else {
+                rpi_mode_lock = false;
+                result = MAV_RESULT_ACCEPTED;
+                sendStatusText(MAV_SEVERITY_INFO, "RPI LOCK OFF");
+            }
+            break;
+        }
+
+        // ArduPilot/Mission Planner "Calibrate Baro": MAV_CMD_PREFLIGHT_CALIBRATION
+        // param3=1. Reset ground_pressure baro ke posisi SEKARANG supaya altitude terbaca 0.
+        // param6=1. Reset pitot tube offset ke 0.
+        case MAV_CMD_PREFLIGHT_CALIBRATION: {
+            bool baro_cal = ((int)(cmd.param3 + 0.5f) == 1);
+            bool aspd_cal = ((int)(cmd.param6 + 0.5f) == 1);
+            
+            if (baro_cal || aspd_cal) {
+                if (arming) {
+                    result = MAV_RESULT_DENIED;
+                    sendStatusText(MAV_SEVERITY_WARNING, "CAL DENIED: DISARM DULU");
+                    break;
+                }
+                
+                bool success = true;
+
+                if (baro_cal) {
+                    extern bool zeroAltitudePreflight();
+                    if (zeroAltitudePreflight()) {
+                        sendStatusText(MAV_SEVERITY_INFO, "BARO CAL OK: ground altitude & EKF direset ke 0m");
+                    } else {
+                        success = false;
+                        sendStatusText(MAV_SEVERITY_WARNING, "BARO CAL GAGAL: tidak ada sampel valid");
+                    }
+                }
+
+                arspd.calibrateAirspeed();
+                sendStatusText(MAV_SEVERITY_INFO, "AIRSPEED CAL COMPLETED");
+                
+                result = success ? MAV_RESULT_ACCEPTED : MAV_RESULT_FAILED;
+            } else {
+                result = MAV_RESULT_UNSUPPORTED;
+                sendStatusText(MAV_SEVERITY_WARNING,
+                               "CAL TYPE NOT SUPPORTED (Gunakan Baro param3=1 / Airspeed param6=1)");
+            }
             break;
         }
 
