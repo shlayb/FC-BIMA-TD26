@@ -1,0 +1,103 @@
+<?xml version="1.0" ?>
+<sdf version="1.9">
+  <world name="fw_runway_world">
+
+    <!-- 1. Konfigurasi Fisika & Waktu Real-Time -->
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size> <!-- 1000 Hz physics loop -->
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <!-- 2. System Plugins Wajib Gazebo Sim -->
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+      <render_engine>ogre</render_engine>
+    </plugin>
+
+    <!-- 3. Pencahayaan & Sky (Matahari & Langit) -->
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- 4. Ground Plane (Landasan / Field) -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>1000 1000</size> <!-- Lapangan 1km x 1km -->
+            </plane>
+          </geometry>
+          <surface>
+            <friction>
+              <ode>
+                <mu>0.7</mu> <!-- Koefisien gesek ban saat landing/takeoff -->
+                <mu2>0.7</mu2>
+              </ode>
+            </friction>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>1000 1000</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.3 0.5 0.3 1</ambient> <!-- Warna rumput/hijau -->
+            <diffuse>0.3 0.5 0.3 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 5. Standalone Fixed-Wing UAV Model (Tanpa perlu download dari internet) -->
+    <model name="fixed_wing_uav">
+      <pose>0 0 0.5 0 0 0</pose>
+      <link name="fuselage">
+        <inertial>
+          <mass>1.5</mass> <!-- 1.5 kg -->
+          <inertia>
+            <ixx>0.08</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>0.08</iyy><iyz>0</iyz>
+            <izz>0.15</izz>
+          </inertia>
+        </inertial>
+        <visual name="body_visual">
+          <geometry>
+            <box><size>0.8 0.15 0.1</size></box> <!-- Badan Pesawat -->
+          </geometry>
+          <material>
+            <ambient>0.8 0.1 0.1 1</ambient>
+            <diffuse>0.8 0.1 0.1 1</diffuse>
+          </material>
+        </visual>
+        <visual name="wing_visual">
+          <pose>0 0 0 0 0 0</pose>
+          <geometry>
+            <box><size>0.25 1.4 0.02</size></box> <!-- Sayap Bentang 1.4m -->
+          </geometry>
+          <material>
+            <ambient>0.9 0.9 0.9 1</ambient>
+            <diffuse>0.9 0.9 0.9 1</diffuse>
+          </material>
+        </visual>
+        <collision name="body_collision">
+          <geometry>
+            <box><size>0.8 1.4 0.1</size></box>
+          </geometry>
+        </collision>
+      </link>
+    </model>
+
+  </world>
+</sdf>
