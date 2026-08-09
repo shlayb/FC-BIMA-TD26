@@ -10,12 +10,21 @@
 #include "pos_hold.h"
 #include "TimingUtils.h"
 
+#define min_roll_default -20
+#define max_roll_default 20
+
 int max_roll_corr =  512;//511
 int max_pitch_corr =  512;//513
 int max_yaw_corr =  512;//510
 int min_roll_corr =  -512;//-514
 int min_pitch_corr =  -512;//-510
 int min_yaw_corr =  -512;//-517
+
+// float-safe map (Arduino map() hanya bekerja integer, output float kena truncate)
+inline float fmap(float x, float in_min, float in_max, float out_min, float out_max) {
+    if (in_max == in_min) return out_min;
+    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
 
 // ===================== FRAME MIX (punyamu) =====================
 // F450 frame konfigurasi x
@@ -56,8 +65,8 @@ float delta_calc_time;
 float alt_ref, heading_now, last_alt, last_heading, alt_now;
 float alt_target, z_velocity;
 float roll_cmd, pitch_cmd, yaw_cmd;
-float min_roll  = -10.0f;
-float max_roll  =  10.0f;
+float min_roll  = min_roll_default;
+float max_roll  =  max_roll_default;
 float min_pitch = -10.0f;
 float max_pitch =  10.0f;
 float min_yaw   = -35.0f;
@@ -219,17 +228,27 @@ void copter_ControlFSFB(int16_t ch_r, int16_t ch_p, int16_t ch_y, int16_t ch_thr
     }
 
     // ===== RC → angle command =====
-    roll_cmd  = 1.3f*(map(ch_r - 1500, min_roll_corr,  max_roll_corr,  min_roll,  max_roll));
-    pitch_cmd = 1.1f*(map(ch_p - 1500, min_pitch_corr, max_pitch_corr, min_pitch, max_pitch));
-    yaw_cmd   = 1.3f*(map(ch_y - 1500, min_yaw_corr,   max_yaw_corr,   min_yaw,   max_yaw));
+    roll_cmd  = 1.3f*(fmap((float)(ch_r - 1500), (float)min_roll_corr,  (float)max_roll_corr,  min_roll,  max_roll));
+    pitch_cmd = 1.1f*(fmap((float)(ch_p - 1500), (float)min_pitch_corr, (float)max_pitch_corr, min_pitch, max_pitch));
+    yaw_cmd   = 1.3f*(fmap((float)(ch_y - 1500), (float)min_yaw_corr,   (float)max_yaw_corr,   min_yaw,   max_yaw));
 
-    // tambahkan koreksi pos-hold
+    // tambahkan koreksi pos-hold, lalu clamp ke batas fisik sudut
+    // (1.3× hanya gain stick, bukan batas sudut — constrain pakai min/max_roll asli)
     roll_cmd  += roll_pos;
     pitch_cmd += pitch_pos;
+    roll_cmd   = constrain(roll_cmd,  min_roll,  max_roll);
+    pitch_cmd  = constrain(pitch_cmd, min_pitch, max_pitch);
 
     // ===== error sudut (cmd - meas) =====
     const float e_roll  = (-roll_cmd  + trim_roll)  - roll;
     const float e_pitch = (-pitch_cmd + trim_pitch) - (-pitch); // sesuai definisimu
+    Serial.print("ch_r : ");Serial.print(ch_r);Serial.print(" | ");
+    Serial.print("roll pos : ");Serial.print(roll_pos);Serial.print(" | ");
+    Serial.print("roll cmd : ");Serial.print(roll_cmd);Serial.print(" | ");
+    Serial.print("trim : ");Serial.print(trim_roll);Serial.print(" | ");
+    Serial.print("roll : ");Serial.print(roll);Serial.print(" | ");
+    Serial.print("error roll : ");Serial.print(e_roll);Serial.print(" | ");
+
 
     // ===== Stabilize (angle→rate) P-only =====
     roll_rate_sp  = constrain(e_roll  * gain.stab_roll_P,  -gain.max_rate_r,  gain.max_rate_r);
@@ -291,19 +310,21 @@ void copter_ControlFSFB(int16_t ch_r, int16_t ch_p, int16_t ch_y, int16_t ch_thr
 
     // ===== Throttle/altitude (punyamu) =====
     u1 = (-gain.k_alt * (alt_target/1.000f) + (-gain.k_z_velocity*(z_velocity)/100.0f)) / 10'000'000.0f; //0.0f;
-    Serial.print("P_roll :"); Serial.print(gain.rate_roll_P);
-    Serial.print(" I_roll :"); Serial.print(gain.rate_roll_I);
-    Serial.print(" D_roll :"); Serial.print(gain.rate_roll_D);
-    Serial.print(" | P_pitch :"); Serial.print(gain.rate_pitch_P);
-    Serial.print(" I_pitch :"); Serial.print(gain.rate_pitch_I);
-    Serial.print(" D_pitch :"); Serial.print(gain.rate_pitch_D);
-    Serial.print(" | P_yaw :"); Serial.print(gain.rate_yaw_P);
-    Serial.print(" I_yaw :"); Serial.print(gain.rate_yaw_I);
-    Serial.print(" D_yaw :"); Serial.print(gain.rate_yaw_D);
-    Serial.print(" | u1 (alt):"); Serial.print(u1);
-    Serial.print(" u2 (roll):"); Serial.print(u2);
-    Serial.print(" u3 (pitch):"); Serial.print(u3);
-    Serial.print(" u4 (yaw):"); Serial.println(u4);
+    // Serial.print("P_roll :"); Serial.print(gain.rate_roll_P);
+    // Serial.print(" I_roll :"); Serial.print(gain.rate_roll_I);
+    // Serial.print(" D_roll :"); Serial.print(gain.rate_roll_D);
+    // Serial.print(" | P_pitch :"); Serial.print(gain.rate_pitch_P);
+    // Serial.print(" I_pitch :"); Serial.print(gain.rate_pitch_I);
+    // Serial.print(" D_pitch :"); Serial.print(gain.rate_pitch_D);
+    // Serial.print(" | P_yaw :"); Serial.print(gain.rate_yaw_P);
+    // Serial.print(" I_yaw :"); Serial.print(gain.rate_yaw_I);
+    // Serial.print(" D_yaw :"); Serial.print(gain.rate_yaw_D);
+    // Serial.print(" | u1 (alt):"); Serial.print(u1);
+    // Serial.print(" u2 (roll):"); Serial.print(u2);
+    // Serial.print(" u3 (pitch):"); Serial.print(u3);
+    // Serial.print(" u4 (yaw):"); Serial.print(u4);
+    // Serial.print("Min Roll :");Serial.print(min_roll);
+    // Serial.print("Max Roll :");Serial.println(max_roll);
 
     // ===== MIXER =====
     omega2[0] = (A_invers[0][0] * u1 + A_invers[0][1] * u2 + A_invers[0][2] * u3 + A_invers[0][3] * u4);

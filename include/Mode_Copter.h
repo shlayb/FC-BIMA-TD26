@@ -51,7 +51,7 @@ protected:
 
   void _update() override {
     alt_hold = true;  // enable alt hold
-    pos_hold = true;
+    pos_hold = false; // disable pos hold
     copter_ControlFSFB(ch_roll, ch_pitch, ch_yaw, ch_throttle, imu.roll, imu.pitch, imu.yaw, imu.gyro_y, imu.gyro_x, imu.gyro_z);
     copter_calcOutput(ch_throttle);
     motor_loop(m1_pwm, m2_pwm, m3_pwm, m4_pwm);

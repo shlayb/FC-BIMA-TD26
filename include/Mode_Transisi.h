@@ -71,7 +71,7 @@ static const float RAMP_TIME_PUSHER_FW = 2.0f;    // Faster ramp for pusher
 static const float RAMP_TIME_HOVER_FW = 5.0f;     // Slower ramp for hover
 static const float RAMP_TIME_PUSHER_MC = 1.0f;    // Faster ramp for pusher
 static const float RAMP_TIME_HOVER_MC = 1.0f;     // Slower ramp for hover
-static const float FORCE_TRANSITION_SEC = 5.0f;   // force transisi ke FBWA setelah N detik
+static const float FORCE_TRANSITION_SEC = 7.0f;   // force transisi ke FBWA setelah N detik
 
 // ================== API MULAI TRANSISI ==================
 void start_transition_to_fw(){
@@ -103,6 +103,8 @@ void phase_transisi() {
   mode_hover = true;
 
   // Quad
+  min_roll = -35.0f;
+  max_roll = 35.0f;
   copter_ControlFSFB(ch_roll, ch_pitch, ch_yaw, ch_throttle,
                      imu.roll, imu.pitch, imu.yaw,
                      imu.gyro_y, imu.gyro_x, imu.gyro_z);
@@ -231,6 +233,8 @@ void update_transition(){
 
     if ((alpha_hover >= 1.0f && alpha_pusher >= 1.0f) || force_timeout){
       is_transitioning = false;
+      min_roll = min_roll_default;
+      max_roll = max_roll_default;  // FIX: was min_roll_default (typo!)
       PUSHER_PWM = PUSHER_PWM_MIN;
       QUAD_PWM_THR = HOVER_PWM_MIN;
       m1_pwm = m2_pwm = m3_pwm = m4_pwm = HOVER_PWM_MIN;
@@ -259,6 +263,8 @@ void update_transition(){
 
     if (alpha_hover >= 1.0f && alpha_pusher >= 1.0f){
       is_transitioning = false;
+      min_roll = min_roll_default;
+      max_roll = max_roll_default;  // FIX: was min_roll_default (typo!)
       PUSHER_PWM = PUSHER_PWM_MIN;
       QUAD_PWM_THR = HOVER_PWM_MIN;
       // m1_pwm = m2_pwm = m3_pwm = m4_pwm = HOVER_PWM_MIN;

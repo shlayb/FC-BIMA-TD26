@@ -298,6 +298,12 @@ void copter_calcOutput(int16_t ch_thr)
     m2_pwm = constrain(m2_pwm, PWM_MIN, PWM_MAX);
     m3_pwm = constrain(m3_pwm, PWM_MIN, PWM_MAX);
     m4_pwm = constrain(m4_pwm, PWM_MIN, PWM_MAX);
+    
+    Serial.print(ch_thr); Serial.print("| ");
+    Serial.print(m1_pwm); Serial.print("| ");
+    Serial.print(m2_pwm); Serial.print("| ");
+    Serial.print(m3_pwm); Serial.print("| ");
+    Serial.println(m4_pwm);
 }
 
 void servos_out_manual() {
