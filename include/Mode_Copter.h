@@ -15,6 +15,8 @@ protected:
   bool _enter() override {
     mode_fbwa_plane      = false;    // contoh: disable fixed-wing
     auto_navigation_mode = false;    // auto nav off
+    min_roll = min_roll_default;
+    max_roll = max_roll_default;
     return true;
   }
 
@@ -46,6 +48,8 @@ protected:
   bool _enter() override {
     mode_fbwa_plane      = false;    // contoh: disable fixed-wing
     auto_navigation_mode = false;    // auto nav off
+    min_roll = min_roll_default;
+    max_roll = max_roll_default;
     return true;
   }
 

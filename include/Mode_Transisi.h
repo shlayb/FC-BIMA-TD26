@@ -233,8 +233,6 @@ void update_transition(){
 
     if ((alpha_hover >= 1.0f && alpha_pusher >= 1.0f) || force_timeout){
       is_transitioning = false;
-      min_roll = min_roll_default;
-      max_roll = max_roll_default;  // FIX: was min_roll_default (typo!)
       PUSHER_PWM = PUSHER_PWM_MIN;
       QUAD_PWM_THR = HOVER_PWM_MIN;
       m1_pwm = m2_pwm = m3_pwm = m4_pwm = HOVER_PWM_MIN;
@@ -263,8 +261,6 @@ void update_transition(){
 
     if (alpha_hover >= 1.0f && alpha_pusher >= 1.0f){
       is_transitioning = false;
-      min_roll = min_roll_default;
-      max_roll = max_roll_default;  // FIX: was min_roll_default (typo!)
       PUSHER_PWM = PUSHER_PWM_MIN;
       QUAD_PWM_THR = HOVER_PWM_MIN;
       // m1_pwm = m2_pwm = m3_pwm = m4_pwm = HOVER_PWM_MIN;
