@@ -9,12 +9,18 @@
 
 // ================== MIXER PUSHER & QUAD ==================
 int16_t PUSHER_PWM_MIN = 988;   // idle/off
-int16_t PUSHER_PWM_MAX = 988; //1800  // cruise power
+int16_t PUSHER_PWM_MAX = 2012;  // pusher max = full throttle
 int16_t HOVER_PWM_MIN = 988;   // idle/off
 int16_t HOVER_PWM_MAX = 988;
 
 float cek_alpha_pusher;
 float cek_alpha_hover;
+
+// ================== RAMP PUSHER dari REMOTE ==================
+// Saat masuk transisi, pusher ramp dari 0 ke nilai remote
+// sehingga tidak langsung loncat ke throttle pilot
+static float pusher_ramp_alpha = 0.0f;  // 0..1, ramp dari 0 ke target remote
+static const float PUSHER_RAMP_TIME = 2.0f;  // detik untuk ramp dari idle ke nilai remote
 
 int PUSHER_PWM, QUAD_PWM_THR;
 
@@ -77,8 +83,12 @@ static const float FORCE_TRANSITION_SEC = 7.0f;   // force transisi ke FBWA sete
 void start_transition_to_fw(){
   is_transitioning   = true;
   trans_to_fw        = true;
-  HOVER_PWM_MAX = ch_throttle;
-  PUSHER_PWM_MAX = ch_throttle;
+  // VTOL motor: latch dari throttle terakhir remote, ramp turun otomatis
+  HOVER_PWM_MAX      = ch_throttle;
+  // Pusher: max = 2012 (full range), pilot kontrol via remote, ramp dari 0
+  PUSHER_PWM_MAX     = 2012;
+  PUSHER_PWM_MIN     = 988;
+  pusher_ramp_alpha  = 0.0f;  // reset ramp pusher ke 0
   trans_start_ms     = millis();
   alpha_hover            = 0.0f;
   alpha_pusher           = 0.0f;
@@ -89,8 +99,11 @@ void start_transition_to_fw(){
 void start_transition_to_mc(){
   is_transitioning   = true;
   trans_to_fw        = false;
-  PUSHER_PWM_MAX = ch_throttle;
-  HOVER_PWM_MAX = ch_throttle;
+  // VTOL motor: latch dari throttle remote saat ini
+  HOVER_PWM_MAX      = ch_throttle;
+  // Pusher: ramp turun dari nilai saat ini ke 988
+  PUSHER_PWM_MAX     = 2012;
+  PUSHER_PWM_MIN     = 988;
   trans_start_ms     = millis();
   alpha_hover            = 0.0f;
   alpha_pusher           = 0.0f;
@@ -116,10 +129,8 @@ void phase_transisi() {
                           imu.roll, imu.pitch, imu.yaw,
                           imu.gyro_y, imu.gyro_x, imu.gyro_z);
     fw_servos_out_fbwa();
-    plane_motors_out();
-
-  // Pusher pakai mixer
-  plane_motors_out_auto(PUSHER_PWM);
+    // JANGAN plane_motors_out() di sini — pusher dikendalikan penuh dari update_transition()
+    // plane_motors_out() akan tulis ch_throttle langsung ke pusher tanpa kendali
 
   mode_phase = 2;
   current    = ModeId::TRNS;
@@ -134,6 +145,7 @@ void update_transition(){
   static bool     force_target_fw = false;  // true→paksa ke FW, false→paksa ke MC
   static uint32_t force_ms = 0;
   static uint32_t last_seen_start_ms = 0;
+  static int      force_pusher_start = 988; // latch PUSHER_PWM saat mulai force ke MC
   const  float    FORCE_RAMP_SEC = 0.6f;    // ramp cepat saat fail-safe
 
   // update_max_pwm_from_remote();
@@ -149,6 +161,7 @@ void update_transition(){
   if (!forcing){
     if (trans_to_fw && mode_now == 1){
       forcing = true; force_target_fw = false; force_ms = millis();
+      force_pusher_start = PUSHER_PWM;  // latch nilai pusher saat ini
       // Serial.println("[FS] Paksa batal: kembali ke MC");
     } else if (!trans_to_fw && mode_now == 2){
       forcing = true; force_target_fw = true;  force_ms = millis();
@@ -173,14 +186,19 @@ void update_transition(){
         // Serial.println("[FS] Selesai paksa → FBWA");
       }
     } else {
-      // paksa ke MC
+      // paksa ke MC: naikkan hover, ramp turun pusher dari nilai saat masuk force
       vtol_quads_set_mix(tau);
-      vtol_pusher_set_mix(1.0f - tau);
+      // Ramp pusher dari force_pusher_start (nilai saat force dimulai) → 988
+      int pusher_ramp_down = (int)(force_pusher_start + (988 - force_pusher_start) * tau);
+      PUSHER_PWM = constrain(pusher_ramp_down, 988, 2012);
+      plane_motors_out_auto(PUSHER_PWM);
       alpha = tau;
       if (tau >= 1.0f){
         forcing = false; is_transitioning = false;
+        PUSHER_PWM = 988;                         // pastikan pusher mati
+        plane_motors_out_auto(988);               // kirim 988 ke ESC pusher
         modes.setMode(ModeId::QHOV); active_mode = ModeId::QHOV;
-        // Serial.println("[FS] Selesai paksa → COPT");
+        // Serial.println("[FS] Selesai paksa → QHOV");
       }
     }
     return; // frame ini cukup
@@ -189,57 +207,58 @@ void update_transition(){
   float t = (millis() - trans_start_ms) * 0.001f;
 
   if (trans_to_fw){
-    // latch speed sederhana (opsional pakai groundspeed kalau tidak ada airspeed)
-  float prog_pusher_fw = _clampf(t / RAMP_TIME_PUSHER_FW, 0.0f, 1.0f);
-  float prog_hover_fw = _clampf(t / RAMP_TIME_HOVER_FW, 0.0f, 1.0f);
+    // ---- VTOL motor: latch throttle awal, ramp turun otomatis ----
+    float prog_hover_fw = _clampf(t / RAMP_TIME_HOVER_FW, 0.0f, 1.0f);
 
+    // ---- Pusher: ramp dari 0, lalu ikuti remote (ch_throttle) ----
+    // Ramp alpha naik dari 0 ke 1 dalam PUSHER_RAMP_TIME detik
+    pusher_ramp_alpha = _clampf(t / PUSHER_RAMP_TIME, 0.0f, 1.0f);
+
+    // Nilai target pusher dari remote: map ch_throttle (988..2012) -> 0..1
+    float remote_pusher_alpha = _clampf(
+        (ch_throttle - 988.0f) / (2012.0f - 988.0f), 0.0f, 1.0f);
+
+    // Pusher PWM = ramp * nilai remote → dari 988 naik smooth ke setpoint pilot
+    float alpha_pusher_target = pusher_ramp_alpha * remote_pusher_alpha;
+    PUSHER_PWM = (int)(988.0f + (2012.0f - 988.0f) * alpha_pusher_target);
+    PUSHER_PWM = constrain(PUSHER_PWM, 988, 2012);
+
+    // ---- Hover: latch awal, ramp turun ----
+    float alpha_hover = prog_hover_fw;
+
+    // Speed latch (opsional, pakai groundspeed)
     const float v_now = ahrs.groundspeed;
     if (!latched_speed_ok && v_now >= SPEED_MIN_MPS){
       latched_speed_ok = true;
-      // speed_reach_ms = millis();
     }
     if (latched_speed_ok && v_now < SPEED_RELAX_MPS){
-      latched_speed_ok = false; // lepas latch bila turun jauh (hysteresis ringan)
+      latched_speed_ok = false;
     }
 
-    float alpha_pusher = prog_pusher_fw;
-    float alpha_hover =  prog_hover_fw;
-
-    if (!latched_speed_ok && alpha_pusher > ALPHA_BEFORE_SPEED_PUSHER) {
-        alpha_pusher = ALPHA_BEFORE_SPEED_PUSHER;
-    }
-
-    // Keep hover at minimum 60% before reaching speed
+    // Batasi hover ramp sebelum speed tercapai
     if (!latched_speed_ok && alpha_hover > ALPHA_BEFORE_SPEED_HOVER) {
         alpha_hover = ALPHA_BEFORE_SPEED_HOVER;
     }
 
-    // alpha = alpha_pusher; // For progress tracking
-
     float mix_hover = 1.0f - alpha_hover;
+    vtol_quads_set_mix(mix_hover);
 
-    vtol_quads_set_mix(mix_hover);  // 60% minimum hover power
-    vtol_pusher_set_mix(alpha_pusher);       // 80% maximum pusher power
-    // kode sebelumnya
-    // vtol_quads_set_mix(1.0f - alpha);
-    // vtol_pusher_set_mix(alpha);
-    cek_alpha_pusher = alpha_pusher;
-    cek_alpha_hover = mix_hover;
+    // Output pusher langsung (sudah dihitung di atas, bypass vtol_pusher_set_mix)
+    plane_motors_out_auto(PUSHER_PWM);
 
+    cek_alpha_pusher = alpha_pusher_target;
+    cek_alpha_hover  = mix_hover;
 
-    // Kondisi 1: ramp selesai normal (speed threshold terpenuhi)
-    // Kondisi 2: force transition — sudah >= FORCE_TRANSITION_SEC detik
+    // Kondisi selesai: hover ramp habis atau timeout
     bool force_timeout = (t >= FORCE_TRANSITION_SEC);
-
-    if ((alpha_hover >= 1.0f && alpha_pusher >= 1.0f) || force_timeout){
+    if ((alpha_hover >= 1.0f) || force_timeout){
       is_transitioning = false;
-      PUSHER_PWM = PUSHER_PWM_MIN;
       QUAD_PWM_THR = HOVER_PWM_MIN;
       m1_pwm = m2_pwm = m3_pwm = m4_pwm = HOVER_PWM_MIN;
       motor_loop(m1_pwm, m2_pwm, m3_pwm, m4_pwm);
       plane_motors_out_auto(PUSHER_PWM);
       modes.setMode(ModeId::FBWA); active_mode = ModeId::FBWA;
-      // if (force_timeout) Serial.println("[FORCE] Timeout 5s → FBWA");
+      // if (force_timeout) Serial.println("[FORCE] Timeout -> FBWA");
       // else               Serial.println("Selesai: masuk FW");
     }
   } else {
