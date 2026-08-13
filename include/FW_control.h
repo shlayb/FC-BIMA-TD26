@@ -62,8 +62,8 @@ class FW_CONTROL {
   float roll_int, pitch_int;
   float min_roll  = -35.0f; //-15.0f;
   float max_roll  =  35.0f; //15.0f;
-  float min_pitch = -35.0f;
-  float max_pitch =  35.0f;
+  float min_pitch = -20.0f;
+  float max_pitch =  20.0f;
   int min_roll_corr  = -512;
   int max_roll_corr  =  512;
   int min_pitch_corr = -512;

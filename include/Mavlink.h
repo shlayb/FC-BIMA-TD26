@@ -37,6 +37,7 @@
 #include "Mode_setup.h"
 #include "Auto_setup.h"
 #include "Voltage.h"
+#include "Actuator.h"
 #include <common/mavlink.h>
 #include <cstring>
 #include <Locations.h>
@@ -132,8 +133,11 @@ private:
     static const unsigned long GPS_MS            = 200;  // 1Hz  (dari 500ms)
     static const unsigned long VFR_MS            = 250;   // 2Hz  (dari 200ms)
     static const unsigned long BATTERY_MS        = 5000;  // 0.2Hz (dari 1000ms)
-    static const unsigned long NAV_CONTROLLER_MS = 1000;  // 1Hz  (dari 200ms)
-    static const unsigned long GLOBAL_POS_MS = 200; // 5Hz
+    static const unsigned long NAV_CONTROLLER_MS = 200;   // 5Hz (dipercepat agar pergerakan nav_pitch di GCS mulus)
+    static const unsigned long GLOBAL_POS_MS     = 200;   // 5Hz
+    static const unsigned long SERVO_OUTPUT_MS   = 100;   // 10Hz (untuk tab Servo Output GCS)
+    static const unsigned long RC_CHANNELS_MS    = 100;   // 10Hz (untuk tab Radio In GCS)
+    static const unsigned long SCALED_PRESSURE_MS= 200;   // 5Hz (Pitot differential pressure for GCS airspeed detection)
 
     static constexpr float     ALERT_THRESHOLD_DEG = 40.0f;
     static const unsigned long ALERT_DEBOUNCE_MS   = 2000;
@@ -151,7 +155,10 @@ private:
     unsigned long lastAlert         = 0;
     unsigned long lastRcPrint       = 0;
     unsigned long lastGlobalPos     = 0;
+    unsigned long lastServoOutput   = 0;
+    unsigned long lastRcChannels    = 0;
     unsigned long lastWpCount       = 0;  // Timer untuk mengirim total WP ke RPI
+    unsigned long lastScaledPressure= 0;
 
     // --- MAVLink buffers ---
     mavlink_status_t  st_usb, st_tlm, st_rpi;
@@ -190,8 +197,12 @@ private:
                                  float aspd_error, float xtrack_error);
     void sendVfrHud(float airspeed, float groundspeed, float heading,
                     float altitude, float climb_rate);
+    void sendScaledPressure();
+    void sendNamedValueFloat(const char* name, float value);
     void sendMissionItemReached(uint16_t seq);
     void sendGlobalPositionInt();
+    void sendServoOutputRaw();
+    void sendRcChannelsRaw();
     void sendMissionCountToRPI();  // Kirim total WP ke RPI secara berkala
 
     uint8_t  getBaseMode()   const;
@@ -312,38 +323,26 @@ void MavlinkHandler::applyRcToGlobals(uint16_t c1, uint16_t c2, uint16_t c3,
     apply(ch_throttle, c3);
     apply(ch_yaw,      c4);
     apply(ch5,         c5);
-    if (!rpi_mode_lock) {
-        arming = ch5 > 1500 ? 1 : 0; // Contoh: channel 5 sebagai switch arming
-    }
+    arming = ch5 > 1500 ? 1 : 0; // Contoh: channel 5 sebagai switch arming
     apply(ch_mode,         c6);
     apply(ch_mode_backup,         c7);
 
-    int remote_want = mode_now;
-    if (ch_mode < 1000) {  // Channel 6 low - Regular modes (1,2,3)
-        if (ch_mode_backup <= 1000) {
-            remote_want = 1;  // Mode 1: Both channels low
-        } else if (ch_mode_backup > 1000 && ch_mode_backup <= 1512) {
-            remote_want = 2;  // Mode 2: Ch7 middle
-        } else if (ch_mode_backup >= 1512) {
-            remote_want = 3;  // Mode 3: Ch7 high (QHOV emergency)
-        }
-    } else {  // Channel 6 middle/high - Special modes (4,5)
-        if (ch_mode > 1000 && ch_mode <= 1512 && ch_mode_backup >= 1512) {
-            remote_want = 4;  // Mode 4: Ch6 middle, Ch7 high
-        } else if (ch_mode >= 1512 && ch_mode_backup >= 1512) {
-            remote_want = 5;  // Mode 5: Both channels high
-        }
-    }
 
-    if (rpi_mode_lock) {
-        // Hard override: pos 3 = QHOV emergency, SELALU diizinkan
-        if (remote_want == 3) {
-            rpi_mode_lock = false;
-            mode_now = 3;
+            if (ch_mode < 1000) {  // Channel 6 low - Regular modes (1,2,3)
+            if (ch_mode_backup <= 1000) {
+                mode_now = 1;  // Mode 1: Both channels low
+            } else if (ch_mode_backup > 1000 && ch_mode_backup <= 1512) {
+                mode_now = 2;  // Mode 2: Ch7 middle
+            } else if (ch_mode_backup >= 1512) {
+                mode_now = 3;  // Mode 3: Ch7 high
+            }
+        } else {  // Channel 6 middle/high - Special modes (4,5)
+            if (ch_mode > 1000 && ch_mode <= 1512 && ch_mode_backup >= 1512) {
+                mode_now = 4;  // Mode 4: Ch6 middle, Ch7 high
+            } else if (ch_mode >= 1512 && ch_mode_backup >= 1512) {
+                mode_now = 5;  // Mode 5: Both channels high
+            }
         }
-    } else {
-        mode_now = remote_want;
-    }
     apply(ch_vehicle_mode,         c8);
 
     g_rcStatus.valid        = true;
@@ -411,7 +410,9 @@ void MavlinkHandler::handleRadioStatus(const mavlink_message_t& msg) {
 //  RC DEBUG PRINT (opsional, dipanggil dari mavlinkTask)
 // ============================================================
 void MavlinkHandler::printRCStatus() {
-    const char* src = "???";
+    const char* 
+    
+    src = "???";
     if      (g_rcStatus.sourceId == 70) src = "ID70 RC_OVERRIDE";
     else if (g_rcStatus.sourceId == 65) src = "ID65 RC_CHANNELS";
     else if (g_rcStatus.sourceId == 35) src = "ID35 RC_RAW    ";
@@ -594,22 +595,16 @@ void MavlinkHandler::handleCommandLong(const mavlink_message_t& msg) {
             const char* mode_name  = "UNKNOWN";
             ModeId      new_mode_id = ModeId::MANU;
 
-            // VTOL mapping (MUST MATCH Mode_Manager.h):
-            // custom  0 → mode_now 1 → TKOF / transisi MC
-            // custom  5 → mode_now 2 → transisi FW / FBWA
-            // custom 10 → mode_now 3 → QHOV (pilot emergency hover)
-            // custom 12 → mode_now 6 → AUTO  (RPi gunakan ini untuk auto)
-            // custom 15 → mode_now 4 → GUIDED
-            if      (custom_mode == 0)  { new_mode = 1; mode_name = "COPT"; new_mode_id = ModeId::COPT; }
-            else if (custom_mode == 5)  { new_mode = 2; mode_name = "FW-TRANS"; new_mode_id = ModeId::FBWA; }
-            else if (custom_mode == 10) { new_mode = 3; mode_name = "QHOV"; new_mode_id = ModeId::QHOV; }
-            else if (custom_mode == 12) { new_mode = 6; mode_name = "AUTO"; new_mode_id = ModeId::AUTO; }
-            else if (custom_mode == 15 || custom_mode == 4) { new_mode = 4; mode_name = "GUIDED"; new_mode_id = ModeId::GUIDED; }
+            // Fixedwing VTOL mapping (MUST MATCH Mode_Manager.h):
+            // 0=MANUAL, 5=FBWA, 4=GUIDED, 10=AUTO
+            // Mode_Manager expects: mode_now 1=MANU, 2=FBWA, 3=AUTO, 4=GUIDED
+            if      (custom_mode == 0)  { new_mode = 1; mode_name = "MANUAL"; new_mode_id = ModeId::MANU; }
+            else if (custom_mode == 5)  { new_mode = 2; mode_name = "FBWA"; new_mode_id = ModeId::FBWA; }
+            else if (custom_mode == 10) { new_mode = 3; mode_name = "AUTO"; new_mode_id = ModeId::AUTO; }  
+            else if (custom_mode == 4)  { new_mode = 4; mode_name = "GUIDED"; new_mode_id = ModeId::GUIDED; } 
             else {
                 result = MAV_RESULT_UNSUPPORTED;
-                char mode_text[50];
-                snprintf(mode_text, sizeof(mode_text), "MODE NOT SUPPORTED cm=%lu", (unsigned long)custom_mode);
-                sendStatusText(MAV_SEVERITY_WARNING, mode_text);
+                sendStatusText(MAV_SEVERITY_WARNING, "MODE NOT SUPPORTED");
                 break;
             }
 
@@ -641,69 +636,14 @@ void MavlinkHandler::handleCommandLong(const mavlink_message_t& msg) {
             char debug_mode[100];
             snprintf(debug_mode, sizeof(debug_mode), 
                      "DEBUG SET_MODE: custom_mode_in=%lu, new_mode=%d, current=(int)%d, mode_name=%s",
-                     (unsigned long)custom_mode, new_mode, (int)current, mode_name);
+                     custom_mode, new_mode, (int)current, mode_name);
             sendStatusText(MAV_SEVERITY_INFO, debug_mode);
-            break;
-        }
-
-        // ============================================================
-        //  MAV_CMD_USER_1 — RPi mode lock control
-        //  param1 = 1.0 → aktifkan lock (RPi berkuasa, remote diabaikan)
-        //  param1 = 0.0 → lepas lock (remote kembali berkuasa)
-        // ============================================================
-        case MAV_CMD_USER_1: {
-            if (cmd.param1 >= 0.5f) {
-                rpi_mode_lock = true;
-                result = MAV_RESULT_ACCEPTED;
-                sendStatusText(MAV_SEVERITY_INFO, "RPI LOCK ON");
-            } else {
-                rpi_mode_lock = false;
-                result = MAV_RESULT_ACCEPTED;
-                sendStatusText(MAV_SEVERITY_INFO, "RPI LOCK OFF");
-            }
-            break;
-        }
-
-        // ArduPilot/Mission Planner "Calibrate Baro": MAV_CMD_PREFLIGHT_CALIBRATION
-        // param3=1. Reset ground_pressure baro ke posisi SEKARANG supaya altitude terbaca 0.
-        // param6=1. Reset pitot tube offset ke 0.
-        case MAV_CMD_PREFLIGHT_CALIBRATION: {
-            bool baro_cal = ((int)(cmd.param3 + 0.5f) == 1);
-            bool aspd_cal = ((int)(cmd.param6 + 0.5f) == 1);
-            
-            if (baro_cal || aspd_cal) {
-                if (arming) {
-                    result = MAV_RESULT_DENIED;
-                    sendStatusText(MAV_SEVERITY_WARNING, "CAL DENIED: DISARM DULU");
-                    break;
-                }
-                
-                bool success = true;
-
-                if (baro_cal) {
-                    extern bool zeroAltitudePreflight();
-                    if (zeroAltitudePreflight()) {
-                        sendStatusText(MAV_SEVERITY_INFO, "BARO CAL OK: ground altitude & EKF direset ke 0m");
-                    } else {
-                        success = false;
-                        sendStatusText(MAV_SEVERITY_WARNING, "BARO CAL GAGAL: tidak ada sampel valid");
-                    }
-                }
-
-                arspd.calibrateAirspeed();
-                sendStatusText(MAV_SEVERITY_INFO, "AIRSPEED CAL COMPLETED");
-                
-                result = success ? MAV_RESULT_ACCEPTED : MAV_RESULT_FAILED;
-            } else {
-                result = MAV_RESULT_UNSUPPORTED;
-                sendStatusText(MAV_SEVERITY_WARNING,
-                               "CAL TYPE NOT SUPPORTED (Gunakan Baro param3=1 / Airspeed param6=1)");
-            }
             break;
         }
 
         default: result = MAV_RESULT_UNSUPPORTED; break;
     }
+
 
     sendCommandAck(cmd.command, result);
 }
@@ -1053,12 +993,21 @@ void MavlinkHandler::sendAlert(const char* txt) {
     mavSendAll(msg);
 }
 
+void MavlinkHandler::sendNamedValueFloat(const char* name, float value) {
+    mavlink_message_t msg;
+    char name_buf[10] = {0};
+    strncpy(name_buf, name, 10);
+    mavlink_msg_named_value_float_pack(SYSTEM_ID, COMPONENT_ID, &msg, getMillis(), name_buf, value);
+    mavSendAll(msg);
+}
+
 void MavlinkHandler::sendAltitude(float altitude) {
     mavlink_message_t msg;
     uint64_t t_usec = (uint64_t)getMillis() * 1000ULL;
     mavlink_msg_altitude_pack(SYSTEM_ID, COMPONENT_ID, &msg,
-                              t_usec, altitude, altitude, 0, altitude, 0, 0.0f);
+                              t_usec,0, altitude, 0, altitude, 0, 0.0f);
     mavSendAll(msg);
+    sendNamedValueFloat("RAW_ALT",0);
 }
 
 void MavlinkHandler::sendAttitude(float roll_rad, float pitch_rad, float yaw_rad) {
@@ -1125,9 +1074,21 @@ void MavlinkHandler::sendNavControllerOutput(float nav_roll, float nav_pitch,
 void MavlinkHandler::sendVfrHud(float airspeed, float groundspeed, float heading,
                                  float altitude, float climb_rate) {
     mavlink_message_t msg;
+    uint16_t thr_pct = (uint16_t)constrain(map(pusher.readMicroseconds(), 988, 2012, 0, 100), 0, 100);
+    if (!arming) thr_pct = 0;
     mavlink_msg_vfr_hud_pack(SYSTEM_ID, COMPONENT_ID, &msg,
                              airspeed, groundspeed, heading,
-                             0, altitude, climb_rate);
+                             thr_pct, altitude, climb_rate);
+    mavSendAll(msg);
+}
+
+void MavlinkHandler::sendScaledPressure() {
+    mavlink_message_t msg;
+    // float press_abs  = (float)baro.get_pressure() / 100.0f;         // Pa -> hPa (mbar) absolute baro pressure
+    float press_diff = arspd.press_psi * 68.94757f;                 // PSI -> hPa (mbar) differential pitot pressure
+    // int16_t temp_cdeg = (int16_t)(baro.get_temperature() * 100.0f); // cdegC
+    mavlink_msg_scaled_pressure_pack(SYSTEM_ID, COMPONENT_ID, &msg,
+                                     getMillis(), 0, press_diff, 0);
     mavSendAll(msg);
 }
 
@@ -1166,6 +1127,44 @@ void MavlinkHandler::sendGlobalPositionInt() {
         hdg             // heading (cdeg)
     );
 
+    mavSendAll(msg);
+}
+
+void MavlinkHandler::sendServoOutputRaw() {
+    mavlink_message_t msg;
+    mavlink_msg_servo_output_raw_pack(
+        SYSTEM_ID, COMPONENT_ID, &msg,
+        (uint32_t)getMillis(),               // time_usec
+        0,                                   // port
+        aileron_L.readMicroseconds(),        // servo1: Aileron Left / Roll
+        elevator.readMicroseconds(),         // servo2: Elevator / Pitch
+        pusher.readMicroseconds(),           // servo3: Throttle / Pusher Motor
+        rudder_L.readMicroseconds(),         // servo4: Rudder / Yaw Left
+        aileron_R.readMicroseconds(),        // servo5: Aileron Right
+        rudder_R.readMicroseconds(),         // servo6: Rudder Right
+        motor1.readMicroseconds(),           // servo7: Motor 1
+        payload.readMicroseconds(),          // servo8: Payload mechanism
+        0, 0, 0, 0, 0, 0, 0, 0               // servo9 - servo16 (unused)
+    );
+    mavSendAll(msg);
+}
+
+void MavlinkHandler::sendRcChannelsRaw() {
+    mavlink_message_t msg;
+    mavlink_msg_rc_channels_raw_pack(
+        SYSTEM_ID, COMPONENT_ID, &msg,
+        (uint32_t)getMillis(),               // time_boot_ms
+        0,                                   // port
+        ch_roll,                             // chan1: Roll
+        ch_pitch,                            // chan2: Pitch
+        ch_throttle,                         // chan3: Throttle
+        ch_yaw,                              // chan4: Yaw
+        ch5,                                 // chan5: Arming switch
+        ch_mode,                             // chan6: Mode switch
+        ch_mode_backup,                      // chan7: Backup mode switch
+        ch_vehicle_mode,                     // chan8: Vehicle mode
+        g_rcStatus.rssi                      // RSSI (0-255)
+    );
     mavSendAll(msg);
 }
 
@@ -1242,10 +1241,15 @@ void MavlinkHandler::mavlinkTask() {
     // Nav controller
     if (now - lastNavController >= NAV_CONTROLLER_MS) {
         lastNavController = now;
+        float aspd_error = target_airspeed - arspd.v_ms;
+        
+        // Menghitung error ketinggian (Target - Aktual) dalam meter
+        float alt_error = (target_altitude.amsl_cm / 100.0f) - baro.altitude;
+        
         sendNavControllerOutput(nav_roll_deg, nav_pitch_deg,
                                 atan2(0, 0), atan2(0, 0),
                                 auto_state.distance_next_wp,
-                                0, 0, 0);
+                                alt_error, aspd_error, 0);
     }
 
     if (now - lastGlobalPos >= GLOBAL_POS_MS) {
@@ -1258,6 +1262,24 @@ void MavlinkHandler::mavlinkTask() {
         lastVfr = now;
         float heading = (imu.yaw < 0) ? imu.yaw + 360 : imu.yaw;
         sendVfrHud(arspd.v_ms, gepees.speed_mps, heading, baro.altitude, baro.get_climb_rate());
+    }
+
+    // Scaled Pressure (Airspeed pitot sensor differential pressure untuk GCS)
+    if (now - lastScaledPressure >= SCALED_PRESSURE_MS) {
+        lastScaledPressure = now;
+        sendScaledPressure();
+    }
+
+    // Servo Output Raw (untuk tab Servo Output di GCS)
+    if (now - lastServoOutput >= SERVO_OUTPUT_MS) {
+        lastServoOutput = now;
+        sendServoOutputRaw();
+    }
+
+    // RC Channels Raw (untuk tab Radio In di GCS)
+    if (now - lastRcChannels >= RC_CHANNELS_MS) {
+        lastRcChannels = now;
+        sendRcChannelsRaw();
     }
 
     // Kirim total WP count ke RPI setiap 1 detik
