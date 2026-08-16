@@ -337,13 +337,11 @@ void update_waypoint(const Locations &prev_WP, const Locations &next_WP, float d
     // check if we are moving in the direction of the front of the vehicle
     bool moving_forwards = fabsf(wrap_PI(_groundspeed_vector.angle() - get_yaw())) < M_PI_2;
 
-    //pelajari ini dulu
-    // if (groundSpeed < 0.1f || !moving_forwards) {
-    //     // use a small ground speed vector in the right direction,
-    //     // allowing us to use the compass heading at zero GPS velocity
-    //     groundSpeed = 0.1f;
-    _groundspeed_vector = Vector2f(cosf(get_yaw()), sinf(get_yaw())) * groundSpeed;
-    // }
+    if (groundSpeed < 0.5f || !moving_forwards) {
+        // use a small ground speed vector in heading direction if ground speed is too low or not moving forwards
+        groundSpeed = MAX(groundSpeed, 0.5f);
+        _groundspeed_vector = Vector2f(cosf(get_yaw()), sinf(get_yaw())) * groundSpeed;
+    }
 
     // Calculate time varying control parameters
     // Calculate the L1 length required for specified period

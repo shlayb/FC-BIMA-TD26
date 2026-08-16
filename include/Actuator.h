@@ -542,8 +542,12 @@ void dual_motor_throttle_out_yaw() {
         mtr_2.writeMicroseconds(988);
     }
 }
-void plane_motors_out_auto(float pwm) { //GA KEPAKE
-    motor_pwm = pwm;
+void plane_motors_out_auto(float pwm = -1.0f) {
+    if (pwm >= 0.0f) {
+        motor_pwm = pwm;
+    } else {
+        motor_pwm = fw_control.get_auto_throttle();
+    }
     motor_pwm = constrain(motor_pwm, MIN_THROTTLE_PWM, MAX_THROTTLE_PWM);
     if (arming) {
         pusher.writeMicroseconds(motor_pwm);  // Dapatkan throttle dari kontrol otomatis

@@ -145,29 +145,32 @@ void FW_CONTROL::updateAUTO_FW(float roll, float pitch, float yaw, float gy, flo
     getIntegral(ch_thr, roll, pitch, yaw);
     demanded_pitch = constrain(get_pitch_demand(), demanded_pitch_min, demanded_pitch_max);
     
-    roll_cmd  = 1.3f*(constrain(nav_roll_cd()/100, demanded_roll_min, demanded_roll_max));
+    roll_cmd  = 1.3f*(constrain(nav_roll_cd()/100.0f, demanded_roll_min, demanded_roll_max));
     pitch_cmd = 1.1f*(demanded_pitch);
     u_roll = ((-fw_gain.rate_roll_P * (-roll + roll_int - (roll_cmd + trim_roll))) + (-fw_gain.rate_roll_D * (gy)));
     u_pitch = ((fw_gain.rate_pitch_P * (-pitch + pitch_int - (-pitch_cmd + trim_pitch))) + (-fw_gain.rate_pitch_D * (gx)));
-
 
     servos[0] = (selector[0][0] * u_roll + selector[0][1] * u_pitch + selector[0][2] * u_yaw); // aileron right
     servos[1] = (selector[1][0] * u_roll + selector[1][1] * u_pitch + selector[1][2] * u_yaw); // aileron left
     servos[2] = (selector[2][0] * u_roll + selector[2][1] * u_pitch + selector[2][2] * u_yaw); // elevator
     servos[3] = (selector[3][0] * u_roll + selector[3][1] * u_pitch + selector[3][2] * u_yaw); // rudder
 
-    servos[0] = constrain(servos[0], -400, 400) ;
-    servos[1] = constrain(servos[1], -400, 400) ;
-    servos[2] = constrain(servos[2], -400, 400) ;
-    servos[3] = constrain(servos[3], -400, 400) ;
+    servos[0] = constrain(servos[0], -400, 400);
+    servos[1] = constrain(servos[1], -400, 400);
+    servos[2] = constrain(servos[2], -400, 400);
+    servos[3] = constrain(servos[3], -400, 400);
 }
 
 int FW_CONTROL::get_auto_throttle() {
-  auto_throttle = fw_gain.rate_thr_P * auto_state.distance_next_wp ; // Implementasi PID throttle jika diperlukan
-  auto_throttle = constrain(auto_throttle, auto_throttle_min, auto_throttle_max);
-  return auto_throttle;
+    int32_t tecs_thr = get_throttle_demand(); // 0 - 100% dari TECS
+    if (tecs_thr > 0) {
+        auto_throttle = map(tecs_thr, 0, 100, 1000, 2000);
+    } else {
+        auto_throttle = 1500;
+    }
+    auto_throttle = constrain(auto_throttle, (int)auto_throttle_min, (int)auto_throttle_max);
+    return auto_throttle;
 }
-
 
 FW_CONTROL fw_control;
 #endif

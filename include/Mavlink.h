@@ -641,6 +641,62 @@ void MavlinkHandler::handleCommandLong(const mavlink_message_t& msg) {
             break;
         }
 
+        // ============================================================
+        //  MAV_CMD_USER_1 — RPi mode lock control
+        //  param1 = 1.0 → aktifkan lock (RPi berkuasa, remote diabaikan)
+        //  param1 = 0.0 → lepas lock (remote kembali berkuasa)
+        // ============================================================
+        case MAV_CMD_USER_1: {
+            if (cmd.param1 >= 0.5f) {
+                rpi_mode_lock = true;
+                result = MAV_RESULT_ACCEPTED;
+                sendStatusText(MAV_SEVERITY_INFO, "RPI LOCK ON");
+            } else {
+                rpi_mode_lock = false;
+                result = MAV_RESULT_ACCEPTED;
+                sendStatusText(MAV_SEVERITY_INFO, "RPI LOCK OFF");
+            }
+            break;
+        }
+
+        // ArduPilot/Mission Planner "Calibrate Baro": MAV_CMD_PREFLIGHT_CALIBRATION
+        // param3=1. Reset ground_pressure baro ke posisi SEKARANG supaya altitude terbaca 0.
+        // param6=1. Reset pitot tube offset ke 0.
+        case MAV_CMD_PREFLIGHT_CALIBRATION: {
+            bool baro_cal = ((int)(cmd.param3 + 0.5f) == 1);
+            bool aspd_cal = ((int)(cmd.param6 + 0.5f) == 1);
+            
+            if (baro_cal || aspd_cal) {
+                if (arming) {
+                    result = MAV_RESULT_DENIED;
+                    sendStatusText(MAV_SEVERITY_WARNING, "CAL DENIED: DISARM DULU");
+                    break;
+                }
+                
+                bool success = true;
+
+                if (baro_cal) {
+                    extern bool zeroAltitudePreflight();
+                    if (zeroAltitudePreflight()) {
+                        sendStatusText(MAV_SEVERITY_INFO, "BARO CAL OK: ground altitude & EKF direset ke 0m");
+                    } else {
+                        success = false;
+                        sendStatusText(MAV_SEVERITY_WARNING, "BARO CAL GAGAL: tidak ada sampel valid");
+                    }
+                }
+
+                arspd.calibrateAirspeed();
+                sendStatusText(MAV_SEVERITY_INFO, "AIRSPEED CAL COMPLETED");
+                
+                result = success ? MAV_RESULT_ACCEPTED : MAV_RESULT_FAILED;
+            } else {
+                result = MAV_RESULT_UNSUPPORTED;
+                sendStatusText(MAV_SEVERITY_WARNING,
+                               "CAL TYPE NOT SUPPORTED (Gunakan Baro param3=1 / Airspeed param6=1)");
+            }
+            break;
+        }
+
         default: result = MAV_RESULT_UNSUPPORTED; break;
     }
 
