@@ -31,9 +31,6 @@
  *    of easy to measure aircraft performance data
  */
 
-    int tecs_min_throtlle = 30;
-    int tecs_max_throttle = 85;
-
     float tes;
 
     // Debug flag - set to true to enable TECS debugging via Serial2
@@ -336,16 +333,16 @@
         _use_synthetic_airspeed_once = true;
     }
 
-    void set_tecs_min_throttle(int value){
-        tecs_min_throtlle = value;
+    void set_tecs_min_throttle(float value){
+        tecs_min_throttle = value;
     }
-    void set_tecs_max_throttle(int value){
+    void set_tecs_max_throttle(float value){
         tecs_max_throttle = value;
     }
-    int get_tecs_min_throttle(){
-        return tecs_min_throtlle;
+    float get_tecs_min_throttle(){
+        return tecs_min_throttle;
     }
-    int get_tecs_max_throttle(){
+    float get_tecs_max_throttle(){
         return tecs_max_throttle;
     }
 
@@ -774,9 +771,7 @@ void _update_throttle_without_airspeed(int16_t throttle_nudge)
 {
     // Calculate throttle demand by interpolating between pitch and throttle limits
     float nomThr;
-    //If landing and we don't have an airspeed sensor and we have a non-zero
-    //TECS_LAND_THR param then use it
-    nomThr = (TECS_CRUISE_THROTTLE + throttle_nudge) * 0.01f;
+    nomThr = (tecs_cruise_throttle + throttle_nudge) * 0.01f;
 
     if (_pitch_dem > 0.0f && _PITCHmaxf > 0.0f)
     {
@@ -1011,8 +1006,8 @@ void update_pitch_throttle( int32_t hgt_dem_cm,
     // Update the speed estimate using a 2nd order complementary filter
     _update_speed(load_factor);
 
-    _THRmaxf = tecs_max_throttle * 0.01f; // 0.85
-    _THRminf = tecs_min_throtlle * 0.01f; // 0.30
+    _THRmaxf = tecs_max_throttle * 0.01f;
+    _THRminf = tecs_min_throttle * 0.01f;
 
     // min of 1% throttle range to prevent a numerical error
     _THRmaxf = MAX(_THRmaxf, _THRminf + 0.01);

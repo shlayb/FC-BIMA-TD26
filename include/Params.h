@@ -2,11 +2,15 @@
 #include <Arduino.h>
 #include <EEPROM.h>
 
+#include "FW_config.h"
+
 // Harus di-include SETELAH FW_CONTROL_FBWA.h karena butuh fw_control
 // Harus di-include SETELAH kedua file kontrol
 extern FW_CONTROL fw_control;
 extern gains gain;
 extern float model_uav;
+extern float _L1_period;
+extern float _L1_damping;
 
 // ============================================================
 //  Param dengan pointer langsung ke variabel aslinya
@@ -89,6 +93,19 @@ inline void initParams() {
     //  Taruh di akhir supaya EEPROM param lama tidak geser.
     // ============================================================
     g_params[i++] = {"MODEL_UAV",      &model_uav,                             0.0f,   0.0f,   1.0f};
+
+    // ============================================================
+    //  FIXED WING AUTO & TECS TUNING (PX4 STYLE)
+    // ============================================================
+    g_params[i++] = {"FW_THR_CRUISE",  &tecs_cruise_throttle,                 45.0f,   0.0f, 100.0f};
+    g_params[i++] = {"FW_THR_MIN",     &tecs_min_throttle,                    18.0f,   0.0f, 100.0f};
+    g_params[i++] = {"FW_THR_MAX",     &tecs_max_throttle,                    85.0f,   0.0f, 100.0f};
+    g_params[i++] = {"FW_GND_SPD_MIN", &min_gndspeed,                          5.0f,   0.0f,  30.0f};
+    g_params[i++] = {"FW_R_LIM_MAX",   &roll_max_deg,                         35.0f,  10.0f,  60.0f};
+    g_params[i++] = {"FW_P_LIM_MAX",   &pitch_max_deg,                        18.0f,   5.0f,  45.0f};
+    g_params[i++] = {"FW_P_LIM_MIN",   &pitch_min_deg,                       -12.0f, -45.0f,  -2.0f};
+    g_params[i++] = {"FW_L1_PERIOD",   &_L1_period,                           22.0f,   5.0f,  50.0f};
+    g_params[i++] = {"FW_L1_DAMPING",  &_L1_damping,                          0.75f,   0.5f,   1.0f};
 
     PARAM_COUNT = i;
 }

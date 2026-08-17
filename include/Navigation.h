@@ -22,7 +22,7 @@ float groundspeed_undershoot;
 void calc_groundspeed_undershoot() {
     if (gepees.gps_status >= GPS_FIX_2D) {
         float gndSpdFwd = ahrs.groundspeed;
-        groundspeed_undershoot = (MIN_GNDSPEED > 0) ? (MIN_GNDSPEED - gndSpdFwd) : 0;
+        groundspeed_undershoot = (min_gndspeed > 0) ? (min_gndspeed - gndSpdFwd) : 0;
     } else {
         groundspeed_undershoot = 0;
     }
