@@ -4,7 +4,7 @@
 #define PWM2_MIN 1047
 #define PWM3_MIN 1047
 #define PWM4_MIN 1047
-#define PWM_MAX 1858//2012
+#define PWM_MAX 2012 //1858
 
 //fbwastate
 #define max_roll_limit = 75;

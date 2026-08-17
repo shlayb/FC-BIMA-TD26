@@ -271,22 +271,44 @@ void payload_control_unified() {
 
 void copter_calcOutput(int16_t ch_thr)
 {
-  throttle = ch_thr;
+  // 1. Base throttle limit
+  int thr_base = constrain(ch_thr, 988, 1850);
+  throttle = thr_base;
+
   int control1 = (int)(omega2[0]*M_CONST);
   int control2 = (int)(omega2[1]*M_CONST);
   int control3 = (int)(omega2[2]*M_CONST);
   int control4 = (int)(omega2[3]*M_CONST);
 
-  control1 = constrain(control1, -400, 400);
-  control2 = constrain(control2, -400, 400);
-  control3 = constrain(control3, -400, 400);
-  control4 = constrain(control4, -400, 400);
+  control1 = constrain(control1, -350, 350);
+  control2 = constrain(control2, -350, 350);
+  control3 = constrain(control3, -350, 350);
+  control4 = constrain(control4, -350, 350);
   
   if(arming){
-    m1_pwm = control1 + throttle ;
-    m2_pwm = control2 + throttle ;
-    m3_pwm = control3 + throttle ;
-    m4_pwm = control4 + throttle ;
+    // 2. Dynamic Mixer Desaturation:
+    int raw1 = control1 + thr_base;
+    int raw2 = control2 + thr_base;
+    int raw3 = control3 + thr_base;
+    int raw4 = control4 + thr_base;
+
+    int max_raw = max(max(raw1, raw2), max(raw3, raw4));
+    if (max_raw > PWM_MAX) {
+        int excess = max_raw - PWM_MAX;
+        thr_base -= excess;
+    }
+
+    // Under-saturation prevention
+    int min_raw = min(min(control1 + thr_base, control2 + thr_base), min(control3 + thr_base, control4 + thr_base));
+    if (min_raw < PWM_MIN && ch_thr > 1100) {
+        int deficit = PWM_MIN - min_raw;
+        thr_base += deficit;
+    }
+
+    m1_pwm = constrain(control1 + thr_base, PWM_MIN, PWM_MAX);
+    m2_pwm = constrain(control2 + thr_base, PWM_MIN, PWM_MAX);
+    m3_pwm = constrain(control3 + thr_base, PWM_MIN, PWM_MAX);
+    m4_pwm = constrain(control4 + thr_base, PWM_MIN, PWM_MAX);
   }
   else{
     m1_pwm = 988;
@@ -294,10 +316,6 @@ void copter_calcOutput(int16_t ch_thr)
     m3_pwm = 988;
     m4_pwm = 988;
   }
-    m1_pwm = constrain(m1_pwm, PWM_MIN, PWM_MAX);
-    m2_pwm = constrain(m2_pwm, PWM_MIN, PWM_MAX);
-    m3_pwm = constrain(m3_pwm, PWM_MIN, PWM_MAX);
-    m4_pwm = constrain(m4_pwm, PWM_MIN, PWM_MAX);
     
     Serial.print(ch_thr); Serial.print("| ");
     Serial.print(m1_pwm); Serial.print("| ");
@@ -334,7 +352,9 @@ void fw_servos_out_fbwa() {
 // NYT
 void copter_nyt_calcOutput(int16_t ch_thr)
 {
-  throttle = ch_thr;
+  int thr_base = constrain(ch_thr, 988, 1850);
+  throttle = thr_base;
+
   int control1 = (int)(omega2[0]*M_CONST);
   int control2 = (int)(omega2[1]*M_CONST);
   int control3 = (int)(omega2[2]*M_CONST);
@@ -342,17 +362,28 @@ void copter_nyt_calcOutput(int16_t ch_thr)
   
   servo_yaw = int(u4 * M_CONST * 600000000); // untuk yaw
 
-  control1 = constrain(control1, -400, 400);
-  control2 = constrain(control2, -400, 400);
-  control3 = constrain(control3, -400, 400);
-  control4 = constrain(control4, -400, 400);
+  control1 = constrain(control1, -350, 350);
+  control2 = constrain(control2, -350, 350);
+  control3 = constrain(control3, -350, 350);
+  control4 = constrain(control4, -350, 350);
   servo_yaw = constrain(servo_yaw, -512, 512);
   
   if(arming){
-    m1_pwm = control1 + throttle ;
-    m2_pwm = control2 + throttle ;
-    m3_pwm = control3 + throttle ;
-    m4_pwm = control4 + throttle ;
+    int raw1 = control1 + thr_base;
+    int raw2 = control2 + thr_base;
+    int raw3 = control3 + thr_base;
+    int raw4 = control4 + thr_base;
+
+    int max_raw = max(max(raw1, raw2), max(raw3, raw4));
+    if (max_raw > PWM_MAX) {
+        int excess = max_raw - PWM_MAX;
+        thr_base -= excess;
+    }
+
+    m1_pwm = constrain(control1 + thr_base, PWM_MIN, PWM_MAX);
+    m2_pwm = constrain(control2 + thr_base, PWM_MIN, PWM_MAX);
+    m3_pwm = constrain(control3 + thr_base, PWM_MIN, PWM_MAX);
+    m4_pwm = constrain(control4 + thr_base, PWM_MIN, PWM_MAX);
   }
   else{
     m1_pwm = 988;
@@ -360,13 +391,10 @@ void copter_nyt_calcOutput(int16_t ch_thr)
     m3_pwm = 988;
     m4_pwm = 988;
   }
-    m1_pwm = constrain(m1_pwm, PWM_MIN, PWM_MAX);
-    m2_pwm = constrain(m2_pwm, PWM_MIN, PWM_MAX);
-    m3_pwm = constrain(m3_pwm, PWM_MIN, PWM_MAX);
-    m4_pwm = constrain(m4_pwm, PWM_MIN, PWM_MAX);
-    // Untuk yaw
-    servo_L = basePWM - servo_yaw; // 1500 + 512
-    servo_R = basePWM - servo_yaw; // 1500 - 512
+
+  // Untuk yaw
+  servo_L = basePWM - servo_yaw; // 1500 + 512
+  servo_R = basePWM - servo_yaw; // 1500 - 512
 }
 
 void motor_loop_nyt(int pwm1, int pwm2, int pwm3, int pwm4, int pwm_yaw_l = 0, int pwm_yaw_r = 0) {
