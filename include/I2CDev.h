@@ -81,9 +81,11 @@ uint8_t I2C::readByte(uint8_t devAddr, uint8_t regAddr, uint8_t *data) {
     _wire.write(regAddr);
     _wire.endTransmission(false);
     _wire.requestFrom(devAddr, (uint8_t)1);
-    if (_wire.available())
-        data = _wire.read();
-    return data;
+    if (_wire.available()) {
+        *data = _wire.read();
+        return 1;
+    }
+    return 0;
 }
 
 uint16_t I2C::readWord(uint8_t devAddr, uint8_t regAddr, uint16_t *data) {
@@ -107,10 +109,10 @@ uint16_t I2C::readBytes(uint8_t devAddr, uint8_t regAddr, uint8_t length, uint8_
     _wire.endTransmission(false);
     _wire.requestFrom(devAddr, length);
     uint8_t count = 0;
-    while (_wire.available()) {  //&& count < length
+    while (_wire.available() && count < length) {
         data[count++] = _wire.read();
     }
-    return *data;
+    return count;
 }
 
 uint32_t I2C::readWords(uint8_t devAddr, uint8_t regAddr, uint8_t length, uint32_t *data) {

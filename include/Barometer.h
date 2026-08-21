@@ -1,47 +1,54 @@
 #pragma once
 
 #include <Arduino.h>
+#include <Wire.h>
+#include <Adafruit_BMP5xx.h>
 #include "FreeRTOS.h"
 #include "task.h"
-
-#include "drivers/ms5611.h"
 #include "Filter.h"
 #include <Filter/Filter.h>
 
 // Virtual Temperature Calculator (NOAA):
 // https://www.weather.gov/epz/wxcalc_virtualtemperature
 
+#define BMP581_I2C_ADDR_SEC  (0x46) // Default SDO = GND
+#define BMP581_I2C_ADDR_PRIM (0x47) // SDO = VDDIO
+#define SEALEVELPRESSURE_HPA (1013.25f)
 
 LowPassFilterFloat lpfbaro;
 DerivativeFilterFloat_Size7 _climb_rate_filter;
-
 KalmanFilter kalman;
 
-class Barometer{
+class Barometer {
 public:
     bool init_baro();
     void thread_baro();
     void update_baro();
-    float altitude;
+    float altitude = 0.0f;
     float get_climb_rate();
     float getEAS2TAS();
 
-    void readPressure(bool compensation);
-    void readTemperature(bool compensation);
+    void readPressure(bool compensation = true);
+    void readTemperature(bool compensation = true);
     void determineGroundPress(uint8_t n);
     
+    double get_pressure() const { return pressure; }           // Satuan: Pascal (Pa)
+    double get_temperature() const { return temperature; }     // Satuan: Celsius (°C)
+    float get_ground_pressure() const { return ground_pressure; } // Satuan: Pascal (Pa)
+    
 private:
-    double sea_level;
-    double pressure;
-    double temperature;
+    Adafruit_BMP5xx bmp;
+    double sea_level = 101325.0;
+    double pressure = 101325.0;        // Pa
+    double temperature = 25.0;         // °C
 
     float source = 1013.25;
-    float ground_pressure;   // Pa
-    float ground_altitude;   // Pa
-    float virtual_temp = 0;  // Kelvin
-    float _last_altitude_EAS2TAS;
-    float _last_alt;
-    float _EAS2TAS;
+    float ground_pressure = 101325.0f; // Pa
+    float ground_altitude = 0.0f;
+    float virtual_temp = 0;            // Kelvin
+    float _last_altitude_EAS2TAS = 0;
+    float _last_alt = 0;
+    float _EAS2TAS = 1.0f;
     float highest_altitude = 0;
     bool is_reach_approach = false;
 
@@ -54,74 +61,44 @@ private:
 };
 
 void Barometer::readPressure(bool compensation) {
-    uint32_t D1 = raw_pressure;
-    uint32_t D2 = raw_temperature;
-
-    int32_t dT = D2 - (uint32_t)fc[4] * 256;
-    int64_t OFF = (int64_t)fc[1] * 65536 + (int64_t)fc[3] * dT / 128;
-    int64_t SENS = (int64_t)fc[0] * 32768 + (int64_t)fc[2] * dT / 256;
-
-    if (compensation) {
-        int32_t TEMP = 2000 + ((int64_t)dT * fc[5]) / 8388608;
-
-        OFF2 = 0;
-        SENS2 = 0;
-
-        if (TEMP < 2000) {
-            OFF2 = 5 * ((TEMP - 2000) * (TEMP - 2000)) / 2;
-            SENS2 = 5 * ((TEMP - 2000) * (TEMP - 2000)) / 4;
-        }
-
-        if (TEMP < -1500) {
-            OFF2 = OFF2 + 7 * ((TEMP + 1500) * (TEMP + 1500));
-            SENS2 = SENS2 + 11 * ((TEMP + 1500) * (TEMP + 1500)) / 2;
-        }
-
-        OFF = OFF - OFF2;
-        SENS = SENS - SENS2;
+    if (bmp.performReading()) {
+        pressure = bmp.pressure * 100.0; // hPa -> Pa
+        temperature = bmp.temperature;
     }
-
-    pressure = (D1 * SENS / 2097152 - OFF) / 32768;
 }
 
 void Barometer::readTemperature(bool compensation) {
-    uint32_t D2 = raw_temperature;
-    int32_t dT = D2 - (uint32_t)fc[4] * 256;
-    int32_t TEMP = 2000 + ((int64_t)dT * fc[5]) / 8388608;
-
-    TEMP2 = 0;
-
-    if (compensation) {
-        if (TEMP < 2000) {
-            TEMP2 = (dT * dT) / pow(2, 31);
-        }
+    if (bmp.performReading()) {
+        pressure = bmp.pressure * 100.0; // hPa -> Pa
+        temperature = bmp.temperature;
     }
-
-    TEMP = TEMP - TEMP2;
-    temperature = ((double)TEMP / 100);
 }
 
 void Barometer::determineGroundPress(uint8_t n) {
     uint8_t i;
 
-    // Perform a few readings to 'flush' bad data from the sensor
+    // Flush a few initial readings
     for (i = 0; i < 5; i++) {
-        readRawBaro();
         readPressure(false);
-        // vTaskDelay(pdMS_TO_TICKS(100));
-        delay(100);
+        delay(20);
     }
-    // Perform 'n' readings and determine the average pressure
-    Serial.println("Computing ground-level pressure...");
-    ground_pressure = 0.0f;
+    
+    Serial.println("Computing ground-level pressure (BMP581)...");
+    float sum_press = 0.0f;
+    uint8_t valid_cnt = 0;
     for (i = 0; i < n; i++) {
-        readRawBaro();
-        readPressure(false);
-        ground_pressure += pressure;
-        // vTaskDelay(pdMS_TO_TICKS(100));
-        delay(100);
+        if (bmp.performReading()) {
+            sum_press += (bmp.pressure * 100.0f); // Pa
+            valid_cnt++;
+        }
+        delay(20);
     }
-    ground_pressure /= (float)n;
+    if (valid_cnt > 0) {
+        ground_pressure = sum_press / (float)valid_cnt;
+        pressure = ground_pressure;
+        temperature = bmp.temperature;
+    }
+    Serial.printf("[BARO] Ground pressure set to: %.2f hPa\n", ground_pressure / 100.0f);
 }
 
 // https://en.wikipedia.org/wiki/Hypsometric_equation
@@ -132,11 +109,9 @@ void Barometer::hypsometricEquation(float current_press) {
 }
 
 void Barometer::calcAltitude(double press, double reference_press) {
-    //* HYPESOMETRIC FORMULA 1
-    // altitude = ((powf(source / ((float)pressure / 100.0), 0.19022256) - 1.0) * ((float)temperature / 100 + 273.15)) / 0.0065;
-
-    //* FORMULA
-    altitude = (44330.0f * (1.0f - pow((double)pressure / (double)reference_press, 0.1902949f)));
+    if (reference_press > 0.0) {
+        altitude = (44330.0f * (1.0f - pow((double)press / (double)reference_press, 0.1902949f)));
+    }
 }
 
 void Barometer::calcSeaLevel(double press, double relative_alt) {
@@ -146,7 +121,6 @@ void Barometer::calcSeaLevel(double press, double relative_alt) {
 // validation : https://keisan.casio.com/exec/system/1224575267
 float Barometer::getEAS2TAS() {
     if ((fabsf(altitude - _last_altitude_EAS2TAS) < 25.0f) && _EAS2TAS != 0) {
-        // not enough change to require re-calculating
         return _EAS2TAS;
     }
     float tempK = temperature + C_TO_KELVIN - ISA_LAPSE_RATE * altitude;
@@ -185,13 +159,30 @@ static inline float baro_safe_value(float v) {
 }
 
 bool Barometer::init_baro() {
-    _I2C1.init();
+    Wire1.begin();
+    Wire1.setClock(400000);
     kalman.initializeKalman(5, 0.1, 1);
-    reset();
-    setOversampling();
-    // vTaskDelay(pdMS_TO_TICKS(100));
-    delay(100);
-    readPROM();
+    
+    bool ok = bmp.begin(BMP581_I2C_ADDR_SEC, &Wire1); // Coba alamat 0x46
+    if (!ok) {
+        Serial.println("BMP581 init on 0x46 failed, trying 0x47...");
+        delay(50);
+        ok = bmp.begin(BMP581_I2C_ADDR_PRIM, &Wire1); // Coba alamat 0x47
+        if (!ok) {
+            Serial.println("[ERROR] BMP581 sensor NOT detected!");
+            return false;
+        }
+    }
+    Serial.println("[OK] BMP581 sensor initialized successfully.");
+
+    /* --- Konfigurasi Filter & Oversampling --- */
+    bmp.setPressureOversampling(BMP5XX_OVERSAMPLING_32X);
+    bmp.setTemperatureOversampling(BMP5XX_OVERSAMPLING_8X);
+    bmp.setIIRFilterCoeff(BMP5XX_IIR_FILTER_COEFF_3);
+    bmp.setOutputDataRate(BMP5XX_ODR_50_HZ);
+    bmp.setPowerMode(BMP5XX_POWERMODE_NORMAL);
+
+    delay(50);
     determineGroundPress(15);
 
     calcAltitude(pressure, ground_pressure);
@@ -201,25 +192,20 @@ bool Barometer::init_baro() {
     return true;
 }
 
-
 void Barometer::update_baro() {
-    readRawBaro();
-    readTemperature(true);
-    readPressure(true);
+    if (bmp.performReading()) {
+        pressure = bmp.pressure * 100.0; // hPa -> Pa
+        temperature = bmp.temperature;
 
-    calcAltitude(pressure, ground_pressure);
-    calcSeaLevel(pressure, altitude);
+        if (ground_pressure > 0.0f) {
+            calcAltitude(pressure, ground_pressure);
+            calcSeaLevel(pressure, altitude);
 
-    // lpfbaro.apply(altitude, 0.02f); 
-    altitude = kalman.kalmanFilter(altitude);
-    altitude    = baro_safe_value(altitude);
-    
-    // Simple altitude limiter: if above 120m, randomize between 110-120m
-    // if (altitude > -10.0f) {
-    //     // Generate random value between 110 and 120
-    //     float randomOffset = (float)(random(0, 1000)) / 100.0f; // 0.00 to 10.00
-    //     altitude = 110.0f + randomOffset; // 110.0 to 120.0
-    // }
+            // lpfbaro.apply(altitude, 0.02f); 
+            altitude = kalman.kalmanFilter(altitude);
+            altitude = baro_safe_value(altitude);
+        }
+    }
 }
 
 extern Barometer baro;

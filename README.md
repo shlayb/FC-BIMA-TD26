@@ -12,7 +12,7 @@ A Teensy 4.1-based flight controller that provides an autopilot platform for fix
 ### Hardware
 - Teensy 4.1
 - Inertial Measurement Sensor **BNO055**
-- Barometric Sensor **MS5611**
+- Barometric Sensor **BMP580 / BMP581** (previously MS5611)
 - Global Positioning System **Radiolink SE100**
 - Airspeed Sensor **MS4525DO**
 - Voltage Sensor

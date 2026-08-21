@@ -1061,9 +1061,9 @@ void MavlinkHandler::sendAltitude(float altitude) {
     mavlink_message_t msg;
     uint64_t t_usec = (uint64_t)getMillis() * 1000ULL;
     mavlink_msg_altitude_pack(SYSTEM_ID, COMPONENT_ID, &msg,
-                              t_usec,0, altitude, 0, altitude, 0, 0.0f);
+                              t_usec, 0, altitude, 0, altitude, 0, 0.0f);
     mavSendAll(msg);
-    sendNamedValueFloat("RAW_ALT",0);
+    sendNamedValueFloat("RAW_ALT", altitude);
 }
 
 void MavlinkHandler::sendAttitude(float roll_rad, float pitch_rad, float yaw_rad) {
@@ -1140,11 +1140,11 @@ void MavlinkHandler::sendVfrHud(float airspeed, float groundspeed, float heading
 
 void MavlinkHandler::sendScaledPressure() {
     mavlink_message_t msg;
-    // float press_abs  = (float)baro.get_pressure() / 100.0f;         // Pa -> hPa (mbar) absolute baro pressure
-    float press_diff = arspd.press_psi * 68.94757f;                 // PSI -> hPa (mbar) differential pitot pressure
-    // int16_t temp_cdeg = (int16_t)(baro.get_temperature() * 100.0f); // cdegC
+    float press_abs  = (float)baro.get_pressure() / 100.0f;          // Pa -> hPa (mbar) absolute baro pressure
+    float press_diff = arspd.press_psi * 68.94757f;                  // PSI -> hPa (mbar) differential pitot pressure
+    int16_t temp_cdeg = (int16_t)(baro.get_temperature() * 100.0f);  // cdegC
     mavlink_msg_scaled_pressure_pack(SYSTEM_ID, COMPONENT_ID, &msg,
-                                     getMillis(), 0, press_diff, 0);
+                                     getMillis(), press_abs, press_diff, temp_cdeg);
     mavSendAll(msg);
 }
 
