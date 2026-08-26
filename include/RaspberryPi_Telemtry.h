@@ -10,25 +10,25 @@ class GPSTelemetry {
 };
 
 void GPSTelemetry::send_gps_to_rpi() {
-    Serial7.print("LAT:");
-    Serial7.print(gepees.latitude, 6);
-    Serial7.print(", LNG:");
-    Serial7.print(gepees.longitude, 6);
-    Serial7.print(", Alt:");
-    Serial7.print(baro.altitude);
-    Serial7.print(", Roll:");
-    Serial7.print(imu.roll);
-    Serial7.print(", Pitch:");
-    Serial7.print(imu.pitch);
-    Serial7.print(", Yaw:");
-    Serial7.print(imu.yaw);
-    Serial7.print(", Head:");
-    Serial7.print(imu.heading);
-    Serial7.print(", WP:");
-    Serial7.print(flag_wp);
-    Serial7.print(", Mode:");
-    Serial7.print(modeCode4(current));
-    Serial7.println();
+    Serial1.print("LAT:");
+    Serial1.print(gepees.latitude, 6);
+    Serial1.print(", LNG:");
+    Serial1.print(gepees.longitude, 6);
+    Serial1.print(", Alt:");
+    Serial1.print(baro.altitude);
+    Serial1.print(", Roll:");
+    Serial1.print(imu.roll);
+    Serial1.print(", Pitch:");
+    Serial1.print(imu.pitch);
+    Serial1.print(", Yaw:");
+    Serial1.print(imu.yaw);
+    Serial1.print(", Head:");
+    Serial1.print(imu.heading);
+    Serial1.print(", WP:");
+    Serial1.print(flag_wp);
+    Serial1.print(", Mode:");
+    Serial1.print(modeCode4(current));
+    Serial1.println();
 }
 
 extern GPSTelemetry gps_telem;

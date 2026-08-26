@@ -238,7 +238,7 @@ if __name__ == "__main__":
         print("[CONN] Skip heartbeat (--no-heartbeat). Langsung ke menu.\n")
         SYSID = 1
     else:
-        print("[CONN] Tunggu heartbeat FC di Serial7 (57600 baud)...")
+        print("[CONN] Tunggu heartbeat FC di Serial1 (Pin 0/1, 57600 baud)...")
         print("[HINT] Jika FC tidak kirim heartbeat, coba --no-heartbeat")
         hb = conn.wait_heartbeat(timeout=15)
         if hb is None:

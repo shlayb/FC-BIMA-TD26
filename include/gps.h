@@ -13,11 +13,12 @@
 
 Barometer baro;
 
-// Enumerasi Status GPS
+// Enumerasi Status GPS sesuai standar MAVLink GPS_FIX_TYPE
 enum StatusGPS {
-    GPS_NO_FIX,
-    GPS_FIX_2D,
-    GPS_FIX_3D
+    GPS_NO_GPS = 0, // Tidak ada data GPS mengalir
+    GPS_NO_FIX = 1, // GPS terdeteksi tapi belum lock satelit (searching)
+    GPS_FIX_2D = 2, // 2D Fix
+    GPS_FIX_3D = 3  // 3D Fix
 };
 
 // Kelas GPS
@@ -114,12 +115,17 @@ void Gepees::calculateVelocity() {
 }
 
 void Gepees::checkStatus() {
-    if ((hdop > 0.0f && hdop < 1.0f) && satellites > 6) {
-        gps_status = GPS_FIX_3D;
-    } else if ((hdop > 0.0f && hdop < 1.0f) || satellites > 6) {
-        gps_status = GPS_FIX_2D;
-    } else {
+    if (gps.charsProcessed() < 10) {
+        gps_status = GPS_NO_GPS;
+        return;
+    }
+
+    if (!gps.location.isValid() || satellites < 4) {
         gps_status = GPS_NO_FIX;
+    } else if (satellites >= 6 && hdop < 2.5f) {
+        gps_status = GPS_FIX_3D;
+    } else {
+        gps_status = GPS_FIX_2D;
     }
 }
 

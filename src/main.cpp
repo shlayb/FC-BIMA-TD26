@@ -25,7 +25,7 @@
 // ============================================================
 #define SERIAL_USB   Serial
 #define SERIAL_UART  Serial2
-#define SERIAL_RASPI Serial7
+#define SERIAL_RASPI Serial1
  
 // ============================================================
 //  KONFIGURASI MODEL & TIMING (ms)
@@ -97,8 +97,8 @@ TaskHandle_t Task_Airspeed; // ← FIX: dulunya salah pakai &Task_Print
 // ============================================================
 DMAMEM static uint8_t dma_rx2[4096];
 DMAMEM static uint8_t dma_tx2[4096];
-DMAMEM static uint8_t dma_rx7[2048];
-DMAMEM static uint8_t dma_tx7[4096];
+DMAMEM static uint8_t dma_rx1[2048];
+DMAMEM static uint8_t dma_tx1[4096];
  
 // ============================================================
 //  FORWARD DECLARATION
@@ -293,8 +293,8 @@ void setup() {
     SERIAL_UART.addMemoryForRead(dma_rx2,  sizeof(dma_rx2));
     SERIAL_UART.addMemoryForWrite(dma_tx2, sizeof(dma_tx2));
     SERIAL_RASPI.begin(57600);
-    SERIAL_RASPI.addMemoryForRead(dma_rx7,  sizeof(dma_rx7));
-    SERIAL_RASPI.addMemoryForWrite(dma_tx7, sizeof(dma_tx7));
+    SERIAL_RASPI.addMemoryForRead(dma_rx1,  sizeof(dma_rx1));
+    SERIAL_RASPI.addMemoryForWrite(dma_tx1, sizeof(dma_tx1));
     delay(100);
  
     // --- Waypoint ---

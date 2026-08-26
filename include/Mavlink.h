@@ -294,6 +294,7 @@ void MavlinkHandler::mavSendAll(const mavlink_message_t& msg) {
     // - kalau sedang upload mission: hanya izinkan pesan mission
     if (mission_state != MISSION_RECEIVING || isMissionMessage(msg.msgid)) {
         mavWrite(Serial7, msg);   // RPi UART
+        mavWrite(Serial1, msg);   // RPi UART
     }
 }
 
@@ -302,6 +303,7 @@ void MavlinkHandler::replyTarget(const mavlink_message_t& msg) {
     if (current_port == PORT_USB) mavWriteUSB(Serial, msg);
     else if (current_port == PORT_TLM) mavWrite(Serial2, msg);
     else if (current_port == PORT_RPI) mavWrite(Serial7, msg);
+    else if (current_port == PORT_RPI) mavWrite(Serial1, msg);
 }
 
 // ============================================================
@@ -456,9 +458,9 @@ void MavlinkHandler::handlePorts() {
         }
     }
 
-    // --- Serial7: Raspberry Pi ---
-    while (Serial7.available()) {
-        uint8_t c = Serial7.read();
+    // --- Serial1: Raspberry Pi ---
+    while (Serial1.available()) {
+        uint8_t c = Serial1.read();
         if (mavlink_parse_char(MAVLINK_COMM_2, c, &rxmsg_rpi, &st_rpi)) {
             processAsFC(rxmsg_rpi, PORT_RPI);
             forwardToOthers(rxmsg_rpi, PORT_RPI);
@@ -514,6 +516,7 @@ void MavlinkHandler::forwardToOthers(const mavlink_message_t& msg, PortId from) 
     
     if (from != PORT_TLM) mavWrite(Serial2, msg);
     if (from != PORT_RPI) mavWrite(Serial7, msg);
+    if (from != PORT_RPI) mavWrite(Serial1, msg);
 }
 
 // ============================================================
@@ -1230,6 +1233,7 @@ void MavlinkHandler::sendMissionCountToRPI() {
                                    0, MAV_COMP_ID_ALL, wp_sum,
                                    MAV_MISSION_TYPE_MISSION);
     mavWrite(Serial7, msg);
+    mavWrite(Serial1, msg);
 }
 
 // ============================================================

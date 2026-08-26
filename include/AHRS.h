@@ -34,7 +34,7 @@
 #include "bno055.h"
 #include "gps.h"
 
-Gepees gepees(0, 1, 38400);
+Gepees gepees(28, 29, 38400);
 Airspeed arspd;
 IMU imu;
 
