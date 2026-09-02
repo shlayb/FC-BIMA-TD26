@@ -97,8 +97,8 @@ inline void initParams() {
     // ============================================================
     //  FIXED WING AUTO & TECS TUNING (PX4 STYLE)
     // ============================================================
-    g_params[i++] = {"FW_THR_CRUISE",  &tecs_cruise_throttle,                 45.0f,   0.0f, 100.0f};
-    g_params[i++] = {"FW_THR_MIN",     &tecs_min_throttle,                    18.0f,   0.0f, 100.0f};
+    g_params[i++] = {"FW_THR_CRUISE",  &tecs_cruise_throttle,                 55.0f,   0.0f, 100.0f};
+    g_params[i++] = {"FW_THR_MIN",     &tecs_min_throttle,                     0.0f,   0.0f, 100.0f};
     g_params[i++] = {"FW_THR_MAX",     &tecs_max_throttle,                    85.0f,   0.0f, 100.0f};
     g_params[i++] = {"FW_GND_SPD_MIN", &min_gndspeed,                          5.0f,   0.0f,  30.0f};
     g_params[i++] = {"FW_R_LIM_MAX",   &roll_max_deg,                         35.0f,  10.0f,  60.0f};

@@ -5,7 +5,7 @@
 //  Set to 1 to simulate via USB Python Bridge, 0 for real flight
 // ============================================================
 #ifndef HITL_ENABLED
-#define HITL_ENABLED 0
+#define HITL_ENABLED 1
 #endif
 
 // buat misi auto
@@ -98,7 +98,7 @@ inline float min_gndspeed         = 5.0f;  // m/s (safety floor angin sakal)
 /** AUTOPILOT CONTROL LIMITS */
 inline float roll_max_deg  = 35.0f;  // sudut max roll auto / fbwa
 inline float pitch_max_deg = 18.0f;  // sudut max nanjak
-inline float pitch_min_deg = -8.0f;  // sudut max menukik (dibatasi -6° agar tidak oversink/diving)
+inline float pitch_min_deg = -12.0f;  // sudut max menukik (dibatasi -6° agar tidak oversink/diving)
 
 #ifndef HEAD_MAX
 #define HEAD_MAX roll_max_deg

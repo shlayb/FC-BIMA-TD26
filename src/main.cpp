@@ -408,7 +408,7 @@ void setup() {
     // xTaskCreate(fwRoll,       "FWRoll",  4096, NULL,  3,  &Task_FWRoll);  // 50 Hz
     xTaskCreate(airspeed,     "Airspeed",2048, NULL,  3,  &Task_Airspeed);// 20 Hz
     // xTaskCreate(voltage,      "Voltage", 2048, NULL,  2,  &Task_Voltage); // 10 Hz
-    xTaskCreate(buzzerTask,   "Buzzer",  2048, NULL,  3,  &Task_Buzzer);  // 100 Hz
+    // xTaskCreate(buzzerTask,   "Buzzer",  2048, NULL,  3,  &Task_Buzzer);  // 100 Hz
    //  xTaskCreate(Print_task,   "Print",   4096, NULL,  2,  &Task_Print);   // 20 Hz — terendah
     // xTaskCreate(Print_To_Raspi,"Raspi", 4096, NULL,  1,  &Task_Raspi);
     // xTaskCreate(Print_telem,   "Telem", 4096, NULL,  1,  &Task_Telem);

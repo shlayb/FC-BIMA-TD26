@@ -50,17 +50,17 @@
     // TECS tuning parameters
     float _hgtCompFiltOmega   = 5.0f;//3.5f;
     float _spdCompFiltOmega   = 2.0f;
-    float _maxClimbRate       = 5.0f;
+    float _maxClimbRate       = 4.5f;
     float _minSinkRate        = 1.0f;
-    float _maxSinkRate        = 3.5f; // Dibatasi 2.0 m/s agar tidak diving
-    float _timeConst          = 3.0f;//3.275f;
+    float _maxSinkRate        = 4.12f; // Dibatasi 2.0 m/s agar tidak diving
+    float _timeConst          = 2.2f;//3.275f;
     float _landTimeConst      = 2.0f;
-    float _ptchDamp           = 0.07f;
+    float _ptchDamp           = 1.2f; // Damping pitch lebih tinggi untuk mencegah overshoot
     float _land_pitch_damp    = 0;
     float _landDamp           = 0.5f;
-    float _thrDamp            = 1.0f; // Tingkatkan damping throttle agar tidak melonjak mendadak
+    float _thrDamp            = 1.3f; // Tingkatkan damping throttle agar tidak melonjak mendadak
     float _land_throttle_damp = 0;
-    float _integGain          = 0.05f; // Perhalus integrator throttle agar tidak windup/osilasi
+    float _integGain          = 0.25f; // Perhalus integrator throttle agar tidak windup/osilasi
     float _integGain_takeoff  = 0;
     float _integGain_land     = 0;
     float _vertAccLim         = 7.0f;
@@ -923,37 +923,34 @@ void _update_pitch(void)
 
 void _initialise_states(float hgt_afe)
 {
-    // Initialise states and variables if DT > 1 second or in climbout
-    if (_DT > 1.0f)
-    {
-        _integTHR_state = 0.0f;
-        _integSEB_state = 0.0f;
-        _integSEBdot = 0.0f;  // Reset pitch integrator
-        _integKE = 0.0f;      // Reset kinetic energy integrator
-        _last_throttle_dem = THROTTLE_CRUISE * 0.01f;
-        _last_pitch_dem = imu.pitch;
-        _hgt_dem_adj_last = hgt_afe;
-        _hgt_dem_adj = _hgt_dem_adj_last;
-        _hgt_dem_prev = _hgt_dem_adj_last;
-        _hgt_dem_in_old = _hgt_dem_adj_last;
-        _TAS_dem_adj = _TAS_dem;
-        my_flags._flags.underspeed = false;
-        my_flags._flags.badDescent = false;
-        _DT = 0.2f; // when first starting TECS, use a
-        // small time constant
-        
-        if (TECS_DEBUG) {
-            char buf[60];
-            snprintf(buf, sizeof(buf), "[TECS] INIT hgt_afe:%.2fm", hgt_afe);
-            Serial2.println(buf);
-        }
+    _integTHR_state = 0.0f;
+    _integSEB_state = 0.0f;
+    _integSEBdot = 0.0f;  // Reset pitch integrator
+    _integKE = 0.0f;      // Reset kinetic energy integrator
+    _last_throttle_dem = tecs_cruise_throttle * 0.01f;
+    _last_pitch_dem = imu.pitch;
+
+    // Ambil ketinggian aktual saat ini (up-positive) agar tidak pitch down dari 0m
+    float cur_hgt = (_height > 1.0f) ? _height : (baro.altitude > 1.0f ? baro.altitude : (hgt_afe > 1.0f ? hgt_afe : _hgt_dem));
+    _hgt_dem_adj_last = cur_hgt;
+    _hgt_dem_adj = _hgt_dem_adj_last;
+    _hgt_dem_prev = _hgt_dem_adj_last;
+    _hgt_dem_in_old = _hgt_dem_adj_last;
+    _TAS_dem_adj = _TAS_dem;
+    my_flags._flags.underspeed = false;
+    my_flags._flags.badDescent = false;
+    _DT = 0.02f;
+    
+    if (TECS_DEBUG) {
+        char buf[60];
+        snprintf(buf, sizeof(buf), "[TECS] INIT hgt:%.2fm", cur_hgt);
+        Serial2.println(buf);
     }
 }
 
 void _update_STE_rate_lim(void)
 {
     // Calculate Specific Total Energy Rate Limits
-    // This is a trivial calculation at the moment but will get bigger once we start adding altitude effects
     _STEdot_max = _maxClimbRate * GRAVITY_MSS;
     _STEdot_min = -_minSinkRate * GRAVITY_MSS;
 }
@@ -966,7 +963,8 @@ void update_pitch_throttle( int32_t hgt_dem_cm,
 {
     // Calculate time in seconds since last update
     uint64_t now = micros();
-    if (_update_pitch_throttle_last_usec == 0) {
+    bool is_first_call = (_update_pitch_throttle_last_usec == 0);
+    if (is_first_call) {
         _DT = 0.02f;
     } else {
         _DT = (now - _update_pitch_throttle_last_usec) * 1.0e-6f;
@@ -975,9 +973,16 @@ void update_pitch_throttle( int32_t hgt_dem_cm,
     _DT = constrain(_DT, 0.001f, 1.0f);
 
     // Convert inputs
-    _hgt_dem = hgt_dem_cm * 0.01; // konversi ke meter
+    _hgt_dem = hgt_dem_cm * 0.01f; // konversi ke meter
     _EAS_dem = EAS_dem_cm; // equivalent airspeed
     
+    // Pastikan state TECS diinisialisasi pertama kali
+    static bool tecs_initialized = false;
+    if (!tecs_initialized || _DT > 1.0f || is_first_call) {
+        _initialise_states(hgt_afe);
+        tecs_initialized = true;
+    }
+
     // MAVLink DEBUG: Print input values on first valid call
     static bool first_call = true;
     if (TECS_DEBUG && first_call && _DT < 1.0f) {
@@ -1034,9 +1039,6 @@ void update_pitch_throttle( int32_t hgt_dem_cm,
 
     // don't allow max pitch to go below min pitch
     _PITCHmaxf = MAX(_PITCHmaxf, _PITCHminf);
-
-    // initialise selected states and variables if DT > 1 second or in climbout
-    _initialise_states(hgt_afe);
 
     // Calculate Specific Total Energy Rate Limits
     _update_STE_rate_lim();
