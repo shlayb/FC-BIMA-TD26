@@ -76,8 +76,8 @@ class FW_CONTROL {
   float demanded_pitch_max = 20.0f;
   float demanded_roll_min = -40.0f;
   float demanded_roll_max = 40.0f;
-  float auto_throttle_min = 1200.0f;
-  float auto_throttle_max = 1700.0f;
+  float auto_throttle_min = 988.0f; // 1000us = 0% idle
+  float auto_throttle_max = 2012.0f; // 2000us = 100% full
 };
 
 void FW_CONTROL::updateFBWA_FW(int16_t ch_r, int16_t ch_p, int16_t ch_y, int16_t ch_thr,
@@ -147,7 +147,7 @@ void FW_CONTROL::updateAUTO_FW(float roll, float pitch, float yaw, float gy, flo
     
     roll_cmd  = 1.3f*(constrain(nav_roll_cd()/100.0f, demanded_roll_min, demanded_roll_max));
     pitch_cmd = 1.1f*(demanded_pitch);
-    u_roll = ((-fw_gain.rate_roll_P * (-roll + roll_int - (roll_cmd + trim_roll))) + (-fw_gain.rate_roll_D * (gy)));
+    u_roll = ((-fw_gain.rate_roll_P * (-roll + roll_int - (-roll_cmd + trim_roll))) + (-fw_gain.rate_roll_D * (gy)));
     u_pitch = ((fw_gain.rate_pitch_P * (-pitch + pitch_int - (-pitch_cmd + trim_pitch))) + (-fw_gain.rate_pitch_D * (gx)));
 
     servos[0] = (selector[0][0] * u_roll + selector[0][1] * u_pitch + selector[0][2] * u_yaw); // aileron right
@@ -162,12 +162,8 @@ void FW_CONTROL::updateAUTO_FW(float roll, float pitch, float yaw, float gy, flo
 }
 
 int FW_CONTROL::get_auto_throttle() {
-    int32_t tecs_thr = get_throttle_demand(); // 0 - 100% dari TECS
-    if (tecs_thr > 0) {
-        auto_throttle = map(tecs_thr, 0, 100, 1000, 2000);
-    } else {
-        auto_throttle = 1500;
-    }
+    int32_t tecs_thr = constrain(get_throttle_demand(), 0, 100);
+    auto_throttle = map(tecs_thr, 0, 100, 988, 2012);
     auto_throttle = constrain(auto_throttle, (int)auto_throttle_min, (int)auto_throttle_max);
     return auto_throttle;
 }

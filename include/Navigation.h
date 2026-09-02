@@ -178,8 +178,8 @@ void navigate() {
     }
 
     if (auto_navigation_mode) {
-        if (flag_wp < 0) {
-            flag_wp++;
+        if (flag_wp <= 0) {
+            flag_wp = 1;
             auto_state.next_wp_crosstrack = false;
             target_altitude.amsl_cm = waypoint[flag_wp].alt;
             set_next_WP(waypoint[flag_wp]);
@@ -201,47 +201,43 @@ void navigate() {
 
     if (auto_navigation_mode) {
         const float wp_radius = WP_RADIUS_DEFAULT;
-        acceptance_distance_m = turn_distance(wp_radius, auto_state.next_turn_angle);  //  > 20 ? turn_distance(wp_radius, auto_state.next_turn_angle) : 21;
+        float td = turn_distance(wp_radius, auto_state.next_turn_angle);
+        acceptance_distance_m = MAX(25.0f, td);
     }
 
     if (auto_takeoff_mode) {
         const float wp_radius = 13.0f;
-        acceptance_distance_m = turn_distance(wp_radius, auto_state.next_turn_angle);
+        float td = turn_distance(wp_radius, auto_state.next_turn_angle);
+        acceptance_distance_m = MAX(15.0f, td);
     }
-    float prop = current_loc.line_path_proportion(prev_WP_loc, next_WP_loc);
-    bool hit_radius = auto_state.distance_next_wp <= acceptance_distance_m;
+    // Hit radius check
+    bool hit_radius = (auto_state.distance_next_wp <= acceptance_distance_m);
     bool finish_line = current_loc.past_interval_finish_line(prev_WP_loc, next_WP_loc);
+    
+    // Syarat klaim waypoint: sudah masuk radius acceptance atau melewati garis batas (finish line)
+    // Khusus waypoint terakhir (WP4), toleransi diperluas (<= 45m atau finish line)
+    bool is_last_wp = (flag_wp >= (wp_sum - 1));
+    bool should_advance = hit_radius || finish_line || (is_last_wp && auto_state.distance_next_wp <= 45.0f);
 
-    Serial.printf(
-        "flag_wp:%d display_wp:%d dist:%.2f acc:%.2f prop:%.3f hit_radius:%d finish:%d auto:%d ct:%d prev(%ld,%ld) next(%ld,%ld) curr(%ld,%ld)\n",
-        flag_wp,
-        display_wp(),
-        auto_state.distance_next_wp,
-        acceptance_distance_m,
-        prop,
-        hit_radius,
-        finish_line,
-        auto_navigation_mode,
-        auto_state.crosstrack,
-        prev_WP_loc.lat,
-        prev_WP_loc.lng,
-        next_WP_loc.lat,
-        next_WP_loc.lng,
-        current_loc.lat,
-        current_loc.lng
-    );
-    if (auto_state.distance_next_wp <= acceptance_distance_m || current_loc.past_interval_finish_line(prev_WP_loc, next_WP_loc)) {
+    if (should_advance) {
         if (auto_navigation_mode) {
-            // Notify GCS that waypoint is reached
+            // Beritahu GCS seq WP saat ini telah dicapai
             notifyWaypointReached(flag_wp);
             
-            flag_wp++;
-            if (flag_wp >= wp_sum) {
-                flag_wp = -1;
+            if (is_last_wp) {
+                // Semua Waypoint telah selesai -> Masuk Mode RTL (Return to Launch)
+                // Matikan navigasi auto DULU agar navigate() tidak jalan lagi saat mode sedang transisi
                 auto_navigation_mode = false;
-                mode_fbwa = true;
+                flag_wp = wp_sum;
+                mode_now = 5;
+                // Langsung set mode RTL via manager agar responsif.
+                modes.setMode(ModeId::RTL);
+                active_mode = ModeId::RTL;
+                current = ModeId::RTL;
+                return;
             } else {
-                auto_state.next_wp_crosstrack = true;
+                // Lanjut ke waypoint berikutnya
+                flag_wp++;
                 target_altitude.amsl_cm = waypoint[flag_wp].alt;
                 set_next_WP(waypoint[flag_wp]);
             }

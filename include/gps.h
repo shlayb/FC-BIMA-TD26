@@ -43,6 +43,10 @@ class Gepees {
     TinyGPSPlus gps;
     SoftwareSerial ss;
     uint32_t baudRate;
+    float alt_m;
+    int32_t alt_cm;
+    float speed_kmph;
+    float course;
 
     float getLatitude() const { return latitude; }
     float getLongitude() const { return longitude; }
@@ -57,10 +61,6 @@ class Gepees {
     StatusGPS getStatus() const { return gps_status; }
 
    private:
-    float alt_m;
-    int32_t alt_cm;
-    float speed_kmph;
-    float course;
     float prev_alt;
     uint32_t prev_time;
 

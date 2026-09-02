@@ -1,4 +1,13 @@
 #pragma once
+
+// ============================================================
+//  HARDWARE-IN-THE-LOOP (HITL) CONFIG
+//  Set to 1 to simulate via USB Python Bridge, 0 for real flight
+// ============================================================
+#ifndef HITL_ENABLED
+#define HITL_ENABLED 0
+#endif
+
 // buat misi auto
 #ifndef WP_RADIUS_DEFAULT
 #define WP_RADIUS_DEFAULT 40
@@ -23,7 +32,7 @@
 #define THROTTLE_MIN 0  // percent
 #endif
 #ifndef THROTTLE_CRUISE
-#define THROTTLE_CRUISE 25  // mode auto (percent)
+#define THROTTLE_CRUISE 55  // mode auto (percent) — harus sinkron dengan tecs_cruise_throttle!
 #endif
 #ifndef THROTTLE_MAX
 #define THROTTLE_MAX 100
@@ -39,8 +48,8 @@
 #endif
 
 /** TECS TUNE (Non-Airspeed Mode Defaults) */
-inline float tecs_cruise_throttle = 45.0f; // % throttle saat terbang datar
-inline float tecs_min_throttle    = 18.0f; // % throttle minimal saat menukik
+inline float tecs_cruise_throttle = 55.0f; // % throttle saat terbang datar
+inline float tecs_min_throttle    = 0.0f;  // % throttle minimal saat menukik (0% idle untuk elektrik)
 inline float tecs_max_throttle    = 85.0f; // % throttle maksimal saat menanjak
 inline float min_gndspeed         = 5.0f;  // m/s (safety floor angin sakal)
 
@@ -48,10 +57,10 @@ inline float min_gndspeed         = 5.0f;  // m/s (safety floor angin sakal)
 #define TECS_MAX_THROTTLE 85
 #endif
 #ifndef TECS_CRUISE_THROTTLE
-#define TECS_CRUISE_THROTTLE 45
+#define TECS_CRUISE_THROTTLE 55
 #endif
 #ifndef TECS_MIN_THROTTLE
-#define TECS_MIN_THROTTLE 18
+#define TECS_MIN_THROTTLE 0
 #endif
 #ifndef TECS_TIME_CONST
 #define TECS_TIME_CONST 8
@@ -59,13 +68,13 @@ inline float min_gndspeed         = 5.0f;  // m/s (safety floor angin sakal)
 
 /** FLY BY WIRE AIRSPEED */
 #ifndef AIRSPEED_CRUISE
-#define AIRSPEED_CRUISE 14.0f  // 14 m/s nominal
+#define AIRSPEED_CRUISE 21.0f  // 21 m/s target cruise groundspeed
 #endif
 #ifndef MIN_AIRSPEED
-#define MIN_AIRSPEED 9.0f  // m/s
+#define MIN_AIRSPEED 12.0f  // m/s safety floor
 #endif
 #ifndef MAX_AIRSPEED
-#define MAX_AIRSPEED 22.0f
+#define MAX_AIRSPEED 30.0f
 #endif
 #ifndef AIRSPEED_STALL
 #define AIRSPEED_STALL 7.0f
@@ -87,9 +96,9 @@ inline float min_gndspeed         = 5.0f;  // m/s (safety floor angin sakal)
 #define MIN_GNDSPEED_CM (min_gndspeed * 100)
 
 /** AUTOPILOT CONTROL LIMITS */
-inline float roll_max_deg  = 35.0f; // sudut max roll auto / fbwa
-inline float pitch_max_deg = 18.0f; // sudut max nanjak
-inline float pitch_min_deg = -12.0f; // sudut max menukik
+inline float roll_max_deg  = 35.0f;  // sudut max roll auto / fbwa
+inline float pitch_max_deg = 18.0f;  // sudut max nanjak
+inline float pitch_min_deg = -8.0f;  // sudut max menukik (dibatasi -6° agar tidak oversink/diving)
 
 #ifndef HEAD_MAX
 #define HEAD_MAX roll_max_deg
@@ -101,7 +110,7 @@ inline float pitch_min_deg = -12.0f; // sudut max menukik
 #define PITCH_MIN pitch_min_deg
 #endif
 #ifndef RUDDER_MIX
-#define RUDDER_MIX 0.30f
+#define RUDDER_MIX 0.00f
 #endif
 
 /** AUTOTAKEOFF CONTROL*/

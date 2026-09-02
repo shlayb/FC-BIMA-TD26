@@ -56,6 +56,13 @@ void setup_mode() {
                 current = ModeId::AUTO;
             }
         }
+        else if (mode_now == 5) {
+            if (active_mode != ModeId::RTL) {
+                modes.setMode(ModeId::RTL);
+                active_mode = ModeId::RTL;
+                current = ModeId::RTL;
+            }
+        }
 
         return;
     }

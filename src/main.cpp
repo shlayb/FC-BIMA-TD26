@@ -19,6 +19,9 @@
 #include "Mode_Manager.h"
 #include "Params.h"
 #include <WP_EEPROM.h>
+#include <HITL_Bridge.h>
+
+#define HITL_time     5     // 200 Hz — Fast serial RX/TX for HITL
  
 // ============================================================
 //  SERIAL ALIAS
@@ -91,7 +94,8 @@ TaskHandle_t Task_Voltage;
 TaskHandle_t Task_FWRoll;   // ← FIX: dulunya salah pakai &Task_Print
 TaskHandle_t Task_Radio;    // ← FIX: dulunya salah pakai &Task_Print
 TaskHandle_t Task_Airspeed; // ← FIX: dulunya salah pakai &Task_Print
- 
+TaskHandle_t Task_HITL;
+
 // ============================================================
 //  DMA BUFFER SERIAL
 // ============================================================
@@ -107,23 +111,38 @@ void printUSB();
 void calibrateMotor();
 void wp_setup();
 
+void hitlTask(void *pvParameters) {
+    TickType_t xLastWake = xTaskGetTickCount();
+    const TickType_t xPeriod = pdMS_TO_TICKS(HITL_time);
+    for (;;) {
+        hitl.processSerial();
+        vTaskDelayUntil(&xLastWake, xPeriod);
+    }
+}
+
 void updateIMU(void *pvParameters){ 
     for(;;){
+#if !HITL_ENABLED
         imu.update_imu();
+#endif
         vTaskDelay(pdMS_TO_TICKS(IMU_time)); // Reduced delay for more frequent updates
     }
 };
 
 void updateBARO(void *pvParameters){
     for(;;){
+#if !HITL_ENABLED
         baro.update_baro();
+#endif
         vTaskDelay(pdMS_TO_TICKS(BARO_time)); // Reduced delay for more frequent updates
     }
 };
 
 void GPS(void *pvParameters){
     for(;;){
+#if !HITL_ENABLED
         gepees.updateGPS();
+#endif
         vTaskDelay(pdMS_TO_TICKS(GPS_time)); // Reduced delay for more frequent updates
     }
 };
@@ -155,9 +174,10 @@ void mavlink_print(void *pvParameters) {
     TickType_t xLastWake = xTaskGetTickCount();
     const TickType_t xPeriod = pdMS_TO_TICKS(MAVLINK_time);
     for (;;) {
+#if !HITL_ENABLED
         mavHandler.handlePorts();
         mavHandler.mavlinkTask();
-
+#endif
         // Kalau task overrun, reset xLastWake agar tidak catch-up
         if ((xTaskGetTickCount() - xLastWake) >= xPeriod) {
             xLastWake = xTaskGetTickCount();  // ← reset, skip catch-up
@@ -168,7 +188,9 @@ void mavlink_print(void *pvParameters) {
 
 void airspeed(void *pvParameters){
     for(;;){
+#if !HITL_ENABLED
         arspd.updateAirspeed();
+#endif
         vTaskDelay(pdMS_TO_TICKS(AIRSPEED_time)); // Reduced delay for more frequent updates
     }
 };
@@ -196,12 +218,14 @@ void controlThd(void *pvParameters){
         modes.registerMode(&mFBWA_FW);
         modes.registerMode(&mGUIDED_FW);
         modes.registerMode(&mAUTO_FW);
+        modes.registerMode(&mRTL_FW);
         modes.setMode(ModeId::MANU);
 
     } else if (model == MODEL_UAV_VTOL) {
         modes.registerMode(&mMANU_FW);
         modes.registerMode(&mFBWA_FW);
         modes.registerMode(&mAUTO_FW);
+        modes.registerMode(&mRTL_FW);
         modes.registerMode(&mQHOV);
         modes.registerMode(&mCOPT);
     }
@@ -274,15 +298,33 @@ void calibrateMotor() {
 }
 
 void wp_setup() {
+#if HITL_ENABLED
+    // Sirkuit pengujian TECS & Groundspeed Navigation di HITL
+    // Koordinat tepat dari home (-7.7738260, 110.3784420):
+    //   WP1: 330m North, WP2: +440m East, WP3: 660m South, WP4: 440m West kembali
+    wp_sum = 0;
+    add_waypoint(-77738260, 1103784420, 50 * M_TO_CM, 0);   // WP 0 (HOME)
+    add_waypoint(-77708566, 1103784420, 80 * M_TO_CM, 1);   // WP 1: 330m North, naik 80m
+    add_waypoint(-77708566, 1103824380, 40 * M_TO_CM, 2);   // WP 2: 440m East,  turun 40m
+    add_waypoint(-77767954, 1103824380, 70 * M_TO_CM, 3);   // WP 3: 660m South, naik 70m
+    add_waypoint(-77767954, 1103784420, 50 * M_TO_CM, 4);   // WP 4: 440m West,  alt 50m
+#else
     add_waypoint(0, 0, 69 * M_TO_CM, 0); // home
     add_waypoint(-77738260, 1103784420, 0.2 * M_TO_CM, 1);  // WP 1: ~2m altitude
     add_waypoint(-77732600, 1103786320, 0.2 * M_TO_CM, 2);  // WP 2: ~2m altitude
     add_waypoint(-77746550, 1103782450, 0.2 * M_TO_CM, 3);  // WP 3: ~2m altitude
+#endif
 }
 
 void setup() {
     milisawal = getMillis();
  
+    modes.registerMode(&mMANU_FW);
+    modes.registerMode(&mFBWA_FW);
+    modes.registerMode(&mGUIDED_FW);
+    modes.registerMode(&mAUTO_FW);
+    modes.registerMode(&mRTL_FW);
+
     modes.setMode(ModeId::MANU);
     active_mode = ModeId::MANU;
     current     = ModeId::MANU;
@@ -297,15 +339,21 @@ void setup() {
     SERIAL_RASPI.addMemoryForWrite(dma_tx1, sizeof(dma_tx1));
     delay(100);
  
+    hitl.init(HITL_ENABLED);
+
     // --- Waypoint ---
     Serial.println("\n=== Waypoint Loading ===");
     initParams();
     loadParamsFromEEPROM();
+#if HITL_ENABLED
+    wp_setup();
+#else
     loadWaypointsFromEEPROM();
     initParams();
     if (!loadWaypointsFromEEPROM()){
         wp_setup();
     }
+#endif
     printEEPROMStatus();
     Serial.println("========================\n");
  
@@ -316,14 +364,16 @@ void setup() {
     // --- Init hardware ---
     buzzer.initWithMusic();
     init_actuator();
+#if !HITL_ENABLED
     ahrs.init_ahrs();
     remote_setup();
-    setup_fuzzy_roll();
     init_voltage();
     arspd.initAirspeed();  // Init I2C airspeed sensor
+#endif
+    setup_fuzzy_roll();
     buzzer.init();
  
-    if (CALIBRATE_MOTORS) calibrateMotor();
+    if (CALIBRATE_MOTORS && !HITL_ENABLED) calibrateMotor();
  
     // --- Buat mutex SEBELUM task dibuat ---
     xIMUMutex    = xSemaphoreCreateMutex();
@@ -341,6 +391,13 @@ void setup() {
     //  FIX: stack size disesuaikan dengan beban masing-masing task
     // ============================================================
  
+#if HITL_ENABLED
+    // Mode HITL: Jalankan Task_HITL untuk komunikasi serial cepat dengan simulator
+    xTaskCreate(hitlTask,     "HITL",    4096, NULL,  6,  &Task_HITL);     // 200 Hz
+    xTaskCreate(controlThd,   "Control", 8192, NULL,  5,  &Task_Control);  // 200 Hz — logic kompleks
+    // xTaskCreate(buzzerTask,   "Buzzer",  2048, NULL,  3,  &Task_Buzzer);   // 100 Hz
+#else
+    // Mode Terbang Nyata
     //                 fungsi          nama        stack  param  prio           handle
     xTaskCreate(updateIMU,    "IMU",     2048, NULL,  6,  &Task_IMU);     // 200 Hz — tertinggi
     xTaskCreate(controlThd,   "Control", 8192, NULL,  5,  &Task_Control); // 200 Hz — logic kompleks
@@ -355,6 +412,7 @@ void setup() {
    //  xTaskCreate(Print_task,   "Print",   4096, NULL,  2,  &Task_Print);   // 20 Hz — terendah
     // xTaskCreate(Print_To_Raspi,"Raspi", 4096, NULL,  1,  &Task_Raspi);
     // xTaskCreate(Print_telem,   "Telem", 4096, NULL,  1,  &Task_Telem);
+#endif
  
     vTaskStartScheduler();
 }

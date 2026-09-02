@@ -51,16 +51,16 @@
     float _hgtCompFiltOmega   = 5.0f;//3.5f;
     float _spdCompFiltOmega   = 2.0f;
     float _maxClimbRate       = 5.0f;
-    float _minSinkRate        = 2.0f;
-    float _maxSinkRate        = 5.0f;
-    float _timeConst          = 5.0f;//3.275f;
+    float _minSinkRate        = 1.0f;
+    float _maxSinkRate        = 3.5f; // Dibatasi 2.0 m/s agar tidak diving
+    float _timeConst          = 3.0f;//3.275f;
     float _landTimeConst      = 2.0f;
-    float _ptchDamp           = 0.0f;
+    float _ptchDamp           = 0.07f;
     float _land_pitch_damp    = 0;
     float _landDamp           = 0.5f;
-    float _thrDamp            = 0.5f;
+    float _thrDamp            = 1.0f; // Tingkatkan damping throttle agar tidak melonjak mendadak
     float _land_throttle_damp = 0;
-    float _integGain          = 0.1f;
+    float _integGain          = 0.05f; // Perhalus integrator throttle agar tidak windup/osilasi
     float _integGain_takeoff  = 0;
     float _integGain_land     = 0;
     float _vertAccLim         = 7.0f;
@@ -375,7 +375,7 @@ void _update_speed(float DT)
         _vel_dot_lpf = _vel_dot_lpf * (1.0f - alpha) + _vel_dot * alpha;
     }
 
-    bool use_airspeed = _use_synthetic_airspeed_once || ahrs.is_airspeed_sensor_enabled;
+    bool use_airspeed = _use_synthetic_airspeed_once || ahrs.is_airspeed_sensor_enabled || ahrs.haveGPS();
 
     // Convert equivalent airspeeds to true airspeeds and harmonise limits
 
@@ -411,10 +411,12 @@ void _update_speed(float DT)
         _TASmax = _TASmin;
     }
 
-    // Get measured airspeed or default to trim speed and constrain to range between min and max if
-    // airspeed sensor data cannot be used
-    if (!ahrs.is_airspeed_sensor_enabled) {
-        // If no airspeed available use average of min and max
+    // Get measured airspeed (from Pitot sensor or GPS groundspeed in Full Groundspeed mode)
+    if (ahrs.is_airspeed_sensor_enabled) {
+        _EAS = arspd.v_ms;
+    } else if (ahrs.haveGPS()) {
+        _EAS = MAX(ahrs.groundspeed, 3.0f);
+    } else {
         _EAS = constrain(AIRSPEED_CRUISE, MIN_AIRSPEED, MAX_AIRSPEED);
     }
 
@@ -570,55 +572,33 @@ void _update_height_demand()
     float max_sink_rate = _maxSinkRate; 
 
     // Limit height rate of change
-    if ((_hgt_dem - _hgt_dem_prev) > (_maxClimbRate * 0.1f))
+    if ((_hgt_dem - _hgt_dem_prev) > (_maxClimbRate * _DT))
     {
-        _hgt_dem = _hgt_dem_prev + _maxClimbRate * 0.1f;
+        _hgt_dem = _hgt_dem_prev + _maxClimbRate * _DT;
     }
-    else if ((_hgt_dem - _hgt_dem_prev) < (-max_sink_rate * 0.1f))
+    else if ((_hgt_dem - _hgt_dem_prev) < (-max_sink_rate * _DT))
     {
-        _hgt_dem = _hgt_dem_prev - max_sink_rate * 0.1f;
+        _hgt_dem = _hgt_dem_prev - max_sink_rate * _DT;
     }
     _hgt_dem_prev = _hgt_dem;
 
     // Apply first order lag to height demand
+    float hgt_dem_adj_prev = _hgt_dem_adj_last;
     _hgt_dem_adj = 0.05f * _hgt_dem + 0.95f * _hgt_dem_adj_last;
-
-    // when flaring force height rate demand to the
-    // configured sink rate and adjust the demanded height to
-    // be kinematically consistent with the height rate.
-
-    // for landing approach we will predict ahead by the time constant
-    // plus the lag produced by the first order filter. This avoids a
-    // lagged height demand while constantly descending which causes
-    // us to consistently be above the desired glide slope. This will
-    // be replaced with a better zero-lag filter in the future.
-    float new_hgt_dem = _hgt_dem_adj;
-    hgt_dem_lag_filter_slew = 0;
     _hgt_dem_adj_last = _hgt_dem_adj;
-    _hgt_dem_adj = new_hgt_dem;
 
-    // Calculate height rate demand based on altitude error
-    // This provides feedforward control to complement the integrator
-    // CRITICAL FIX: This was previously always zero, causing elevator to overshoot
-    float hgt_error = _hgt_dem_adj - _height;
-    
-    // Use adaptive time constant for better response at low altitudes
-    // For small altitude errors (< 3m), use faster response to prevent integrator windup
-    float adaptive_time_const = _timeConst;
-    if (fabsf(hgt_error) < 3.0f) {
-        // Scale time constant down for small errors (min 1.5s)
-        adaptive_time_const = MAX(1.5f, fabsf(hgt_error) * 0.5f + 1.0f);
+    if (_DT > 0.001f) {
+        _hgt_rate_dem = (_hgt_dem_adj - hgt_dem_adj_prev) / _DT;
+    } else {
+        _hgt_rate_dem = 0.0f;
     }
-    
-    _hgt_rate_dem = hgt_error / adaptive_time_const;
-    // Limit height rate demand to max climb and sink rates
-    _hgt_rate_dem = constrain(_hgt_rate_dem, -_minSinkRate, _maxClimbRate);
+    _hgt_rate_dem = constrain(_hgt_rate_dem, -max_sink_rate, _maxClimbRate);
 
     // DEBUG: Altitude control values every 1000ms via Serial2
     if (TECS_DEBUG && (millis() - _last_debug_ms > 1000)) {
         char buf[100];
-        snprintf(buf, sizeof(buf), "[ALT] H:%.2f T:%.2f E:%.2f RD:%.2f", 
-                 _height, _hgt_dem_adj, hgt_error, _hgt_rate_dem);
+        snprintf(buf, sizeof(buf), "[ALT] H:%.2f T:%.2f RD:%.2f", 
+                 _height, _hgt_dem_adj, _hgt_rate_dem);
         Serial2.println(buf);
     }
 }
@@ -830,7 +810,7 @@ void _update_pitch(void)
     // A SKE_weighting of 2 provides 100% priority to speed control. This is used when an underspeed condition is detected. In this instance, if airspeed
     // rises above the demanded value, the pitch angle will be increased by the TECS controller.
     _SKE_weighting = constrain(_spdWeight, 0.0f, 2.0f);
-    if (!ahrs.is_airspeed_sensor_enabled || _use_synthetic_airspeed) {
+    if (!ahrs.is_airspeed_sensor_enabled && !_use_synthetic_airspeed_once) {
         _SKE_weighting = 0.0f;
     } 
 
@@ -986,8 +966,13 @@ void update_pitch_throttle( int32_t hgt_dem_cm,
 {
     // Calculate time in seconds since last update
     uint64_t now = micros();
-    _DT = (now - _update_pitch_throttle_last_usec) * 1.0e-6f;
+    if (_update_pitch_throttle_last_usec == 0) {
+        _DT = 0.02f;
+    } else {
+        _DT = (now - _update_pitch_throttle_last_usec) * 1.0e-6f;
+    }
     _update_pitch_throttle_last_usec = now;
+    _DT = constrain(_DT, 0.001f, 1.0f);
 
     // Convert inputs
     _hgt_dem = hgt_dem_cm * 0.01; // konversi ke meter
@@ -1003,8 +988,9 @@ void update_pitch_throttle( int32_t hgt_dem_cm,
         first_call = false;
     }
 
-    // Update the speed estimate using a 2nd order complementary filter
-    _update_speed(load_factor);
+    // Update load factor & speed estimate using a 2nd order complementary filter
+    _load_factor = load_factor;
+    _update_speed(_DT);
 
     _THRmaxf = tecs_max_throttle * 0.01f;
     _THRminf = tecs_min_throttle * 0.01f;
@@ -1067,12 +1053,9 @@ void update_pitch_throttle( int32_t hgt_dem_cm,
     // Calculate specific energy quantitiues
     _update_energies();
 
-    // Calculate throttle demand - use simple pitch to throttle if no
-    // airspeed sensor.
-    // Note that caller can demand the use of
-    // synthetic airspeed for one loop if needed. This is required
-    // during QuadPlane transition when pitch is constrained
-    if ((ahrs.is_airspeed_sensor_enabled && _use_synthetic_airspeed) || _use_synthetic_airspeed_once)
+    // Calculate throttle demand - use closed loop energy controller if sensor is enabled,
+    // or if synthetic airspeed / GPS Groundspeed is available
+    if (ahrs.is_airspeed_sensor_enabled || _use_synthetic_airspeed_once || ahrs.haveGPS())
     {
         _update_throttle_with_airspeed();
         _use_synthetic_airspeed_once = false;

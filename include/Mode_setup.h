@@ -3,7 +3,10 @@
 
 extern int mode_phase,Mode;
 
-enum class ModeId : uint8_t { COPT, QHOV, GUIDED, MANU, FBWA, AUTO, TRNS, COUNT };
+enum class ModeId : uint8_t { COPT, QHOV, GUIDED, MANU, FBWA, AUTO, TRNS, RTL, COUNT };
+
+extern ModeId current;
+extern ModeId active_mode;
 
 static inline const char* modeCode4(ModeId id){
   switch(id){
@@ -14,6 +17,7 @@ static inline const char* modeCode4(ModeId id){
     case ModeId::QHOV: return "QHOV";
     case ModeId::GUIDED: return "GUID";
     case ModeId::TRNS: return "TRNS";
+    case ModeId::RTL: return "RTL ";
     // case ModeId::FIXEDWING: return "FIXEDWING";
     default: return "UNKN";
   }
@@ -44,21 +48,10 @@ public:
     _tbl[(uint8_t)m->id()] = m;
   }
 
-  bool setMode(ModeId id){
-    ModeBase* next = _tbl[(uint8_t)id];
-    if(!next) return false;
-    if(_cur) _cur->exit();
-    _cur = next;
-    if(!_cur->enter()){ 
-      _cur = nullptr;
-      return false;
-    }
-    _code4 = _cur->code4();
-    return true;
-  }
+  bool setMode(ModeId id);
 
   void update(){ if(_cur) _cur->update(); }   // tanpa dt
-  ModeBase* current() const { return _cur; }
+  ModeBase* currentMode() const { return _cur; }
   const char* code4() const { return _code4; }
 
    // ==== Tambahan: suspend semua mode ====
@@ -75,8 +68,19 @@ private:
   const char* _code4 = "UNKN";
 };
 
-extern ModeId current;
-
 extern ModeManager modes;
 
-extern ModeId active_mode;
+inline bool ModeManager::setMode(ModeId id){
+  ModeBase* next = _tbl[(uint8_t)id];
+  if(!next) return false;
+  if(_cur) _cur->exit();
+  _cur = next;
+  if(!_cur->enter()){ 
+    _cur = nullptr;
+    return false;
+  }
+  _code4 = _cur->code4();
+  active_mode = id;
+  current = id;
+  return true;
+}

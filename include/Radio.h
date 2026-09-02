@@ -171,22 +171,42 @@ void remote_loop() {
         //     mode_now = 3;
         // }
 
-        // Mode selection uses ch7 only: low=MANU, mid=FBWA, high=AUTO
+        // Mode selection with edge-detection + auto-mode lock (ArduPilot style)
+        // Hanya mengubah mode jika switch fisik di remote benar-benar digerakkan/berubah posisi.
+        // Hal ini mencegah switch AUTO menimpa mode RTL otomatis atau mode GCS/Mission Planner.
+        int target_radio_mode = 0;
         if (ch_mode < 1000) {  // Channel 6 low - Regular modes (1,2,3)
             if (ch_mode_backup <= 1000) {
-                mode_now = 1;  // Mode 1: Both channels low
+                target_radio_mode = 1;  // Mode 1: MANU
             } else if (ch_mode_backup > 1000 && ch_mode_backup <= 1512) {
-                mode_now = 2;  // Mode 2: Ch7 middle
+                target_radio_mode = 2;  // Mode 2: FBWA
             } else if (ch_mode_backup >= 1512) {
-                mode_now = 3;  // Mode 3: Ch7 high
+                target_radio_mode = 3;  // Mode 3: AUTO
             }
         } else {  // Channel 6 middle/high - Special modes (4,5)
             if (ch_mode > 1000 && ch_mode <= 1512 && ch_mode_backup >= 1512) {
-                mode_now = 4;  // Mode 4: Ch6 middle, Ch7 high
+                target_radio_mode = 4;  // Mode 4: GUIDED
             } else if (ch_mode >= 1512 && ch_mode_backup >= 1512) {
-                mode_now = 5;  // Mode 5: Both channels high
+                target_radio_mode = 5;  // Mode 5: RTL
             }
         }
+
+        static int last_radio_mode = -1;
+        if (last_radio_mode == -1) {
+            // Inisialisasi awal saat pertama kali remote terbaca
+            last_radio_mode = target_radio_mode;
+            mode_now = target_radio_mode;
+        } else if (target_radio_mode != last_radio_mode) {
+            // Pilot secara fisik memindahkan switch remote -> override mode
+            // Catat: update last_radio_mode SELALU saat switch berubah fisik
+            // agar bisa deteksi perubahan berikutnya dengan benar
+            last_radio_mode = target_radio_mode;
+            mode_now = target_radio_mode;
+        }
+        // KUNCI OTOMATIS: Jika mode internal (RTL/GUIDED) sudah aktif,
+        // dan switch radio masih di posisi lama (target sama dengan last_radio_mode),
+        // JANGAN timpa mode_now. mode_now tetap seperti yang diset oleh navigasi internal.
+        // Tidak ada aksi tambahan diperlukan karena else-branch sudah tidak mengubah mode_now.
     }
 }
 #endif

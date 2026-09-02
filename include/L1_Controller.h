@@ -76,11 +76,11 @@ Modified to provide explicit control over capture angle
     //--------------TUNING--------------//
     // L1 tracking loop period (sec)
     //masukin nilai paramnya, period kalo kecil agresif, kalo besar lebih lama, tp default dr ardupilot 20
-    float _L1_period = 22.0f; //20
+    float _L1_period = 17.0f; // 17s for crisp corner capture
     
     // L1 tracking loop damping ratio
     //masukin nilai paramnya, kalo overshoot jgn pake <0.7 atau >0.85
-    float _L1_damping = 0.73f;
+    float _L1_damping = 0.80f;
     
     //masukin nilai paramnya, kalo 0 disable, kalo 0.1 .....
     float _L1_xtrack_i_gain = 0.2;
