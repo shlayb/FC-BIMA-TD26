@@ -14,12 +14,14 @@
 #include "bno055.h"
 #include "buzzer.h"
 #include "Mode_setup.h"
+#include "takeoff.h"
 
 void exit_auto(){
     // Serial2.println("EXIT AUTO MODE");
     enterauto = false;
     auto_throttle_mode = false;
     auto_navigation_mode = false;
+    launch_guard.on_exit_auto();
     // Serial2.print("flag_wp tersimpan: "); Serial2.println(flag_wp);
 }
 
@@ -27,6 +29,7 @@ void init_auto(){
     auto_throttle_mode = true;
     auto_navigation_mode = true;
     auto_loiter_mode = false;
+    launch_guard.on_enter_auto();
     
     // Cek apakah ini first entry atau resume
     if (flag_wp <= 0) {
@@ -153,11 +156,23 @@ protected:
     update_alt();
     updateAuto_FW();
     
+    // Launch Guard: Di darat motor dijamin OFF (988), aktif setelah dilempar / di-shake
+    float safe_pitch_dem = nav_pitch_deg;
+    float safe_roll_dem  = nav_roll_deg;
+    float safe_thr_pwm   = 988.0f;
+
+    launch_guard.update(safe_pitch_dem, safe_roll_dem, safe_thr_pwm);
+
+    if (!launch_guard.is_launch_complete()) {
+        nav_pitch_deg = safe_pitch_dem;
+        nav_roll_deg  = safe_roll_dem;
+    }
+
     // Cascaded AUTO controller derived from FBWA inner loop + L1 + TECS
     fw_control.updateAUTO_FW(imu.roll, imu.pitch, imu.yaw,
                              imu.gyro_y, imu.gyro_x, imu.gyro_z);
     fw_servos_out_fbwa();
-    plane_motors_out_auto();
+    plane_motors_out_auto(safe_thr_pwm);
     payload_control_unified();  // Unified payload control (manual + auto)
 
 #if !HITL_ENABLED

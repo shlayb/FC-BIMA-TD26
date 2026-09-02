@@ -4,6 +4,8 @@
 
 #include "FW_config.h"
 
+#include "takeoff.h"
+
 // Harus di-include SETELAH FW_CONTROL_FBWA.h karena butuh fw_control
 // Harus di-include SETELAH kedua file kontrol
 extern FW_CONTROL fw_control;
@@ -11,6 +13,26 @@ extern gains gain;
 extern float model_uav;
 extern float _L1_period;
 extern float _L1_damping;
+
+// Actuator Pin variables
+extern float SERVO_RUD_L;
+extern float MOTOR_1_PIN;
+extern float SERVO_ELE;
+extern float MOTOR_2_PIN;
+extern float SERVO_AIL_L;
+extern float MOTOR_3_PIN;
+extern float THROTTLE;
+extern float MOTOR_4_PIN;
+extern float SERVO_RUD_R;
+extern float SERVO_AIL_R;
+extern float SERVO_PAYLOAD;
+
+// Airspeed & RTL variables
+extern float AIRSPEED_CRUISE;
+extern float MIN_AIRSPEED;
+extern float MAX_AIRSPEED;
+extern float AIRSPEED_STALL;
+extern float rtl_altitude;
 
 // ============================================================
 //  Param dengan pointer langsung ke variabel aslinya
@@ -24,7 +46,7 @@ struct Param {
     float   max_val;
 };
 
-static Param g_params[64];
+static Param g_params[100];
 static uint16_t PARAM_COUNT = 0;
 
 inline void initParams() {
@@ -106,6 +128,41 @@ inline void initParams() {
     g_params[i++] = {"FW_P_LIM_MIN",   &pitch_min_deg,                       -12.0f, -45.0f,  -2.0f};
     g_params[i++] = {"FW_L1_PERIOD",   &_L1_period,                           22.0f,   5.0f,  50.0f};
     g_params[i++] = {"FW_L1_DAMPING",  &_L1_damping,                          0.75f,   0.5f,   1.0f};
+
+    // ============================================================
+    //  AIRSPEED & RTL PARAMETERS
+    // ============================================================
+    g_params[i++] = {"AIRSPEED_CRUISE", &AIRSPEED_CRUISE,                      21.0f,   5.0f,  35.0f};
+    g_params[i++] = {"MIN_AIRSPEED",    &MIN_AIRSPEED,                         12.0f,   5.0f,  30.0f};
+    g_params[i++] = {"MAX_AIRSPEED",    &MAX_AIRSPEED,                         30.0f,  10.0f,  45.0f};
+    g_params[i++] = {"AIRSPEED_STALL",  &AIRSPEED_STALL,                        7.0f,   5.0f,  25.0f};
+    g_params[i++] = {"RTL_ALTITUDE",    &rtl_altitude,                         60.0f,  10.0f, 200.0f};
+
+    // ============================================================
+    //  TAKEOFF / LAUNCH GUARD (ArduPilot TKOFF_* style)
+    // ============================================================
+    g_params[i++] = {"TKOFF_LVL_ALT",   &launch_guard.safe_climb_alt,          15.0f,   2.0f, 100.0f};      // Alt selesai climbout (m)
+    g_params[i++] = {"TKOFF_LVL_PITCH", &launch_guard.takeoff_pitch_deg,       15.0f,   0.0f,  35.0f};      // Target pitch climbout (deg)
+    g_params[i++] = {"TKOFF_THR_MINACC",&launch_guard.throw_accel_thresh,      13.0f,   5.0f,  35.0f};      // Accel lempar (m/s^2)
+    g_params[i++] = {"TKOFF_THR_DELAY", &launch_guard.release_delay_ms,       400.0f,   0.0f,2000.0f};      // Jeda lepas tangan (ms)
+    g_params[i++] = {"TKOFF_THR_RAMP",  &launch_guard.ramp_time_sec,            1.2f,   0.1f,   5.0f};      // Durasi ramp throttle (s)
+    g_params[i++] = {"TKOFF_SHAKE_ACC", &launch_guard.shake_accel_thresh,       9.0f,   3.0f,  25.0f};      // Accel shake-to-wake (m/s^2)
+    g_params[i++] = {"TKOFF_GND_SPD",   &launch_guard.min_groundspeed_launch,   3.0f,   0.5f,  15.0f};      // Min groundspeed launch (m/s)
+
+    // ============================================================
+    //  ACTUATOR PIN MAPPING (CH_MTR_1 .. CH_MTR_11)
+    // ============================================================
+    g_params[i++] = {"CH_MTR_1",        &SERVO_RUD_L,                           2.0f,   0.0f,  41.0f};
+    g_params[i++] = {"CH_MTR_2",        &SERVO_ELE,                            37.0f,   0.0f,  41.0f};
+    g_params[i++] = {"CH_MTR_3",        &SERVO_AIL_L,                           6.0f,   0.0f,  41.0f};
+    g_params[i++] = {"CH_MTR_4",        &THROTTLE,                             10.0f,   0.0f,  41.0f};
+    g_params[i++] = {"CH_MTR_5",        &SERVO_AIL_R,                          33.0f,   0.0f,  41.0f};
+    g_params[i++] = {"CH_MTR_6",        &SERVO_PAYLOAD,                        36.0f,   0.0f,  41.0f};
+    g_params[i++] = {"CH_MTR_7",        &MOTOR_1_PIN,                           3.0f,   0.0f,  41.0f};
+    g_params[i++] = {"CH_MTR_8",        &MOTOR_2_PIN,                           5.0f,   0.0f,  41.0f};
+    g_params[i++] = {"CH_MTR_9",        &MOTOR_3_PIN,                           9.0f,   0.0f,  41.0f};
+    g_params[i++] = {"CH_MTR_10",       &MOTOR_4_PIN,                          11.0f,   0.0f,  41.0f};
+    g_params[i++] = {"CH_MTR_11",       &SERVO_RUD_R,                          13.0f,   0.0f,  41.0f};
 
     PARAM_COUNT = i;
 }

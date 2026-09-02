@@ -22,18 +22,20 @@
 // #define MOTOR_3_PIN  12
 // #define MOTOR_4_PIN  14
 
-//PIN FC BARU
-#define SERVO_AIL_L 2  //MTR 1
-#define SERVO_ELE 4    //MTR 2
-#define THROTTLE 10  //MTR 4
-#define SERVO_RUD_L 6 //MTR 3
-#define SERVO_AIL_R 12 //MTR 5
-#define SERVO_RUD_R 33 //MTR 8
-#define SERVO_PAYLOAD 14 //MTR 6
-#define MOTOR_1_PIN 3  //MTR 4  (Tidak dipakai)
-#define MOTOR_2_PIN 5 //FC pin DICEK LAGI (Tidak dipakai)
-#define MOTOR_3_PIN 9  //FC pin 9 (Tidak dipakai)
-#define MOTOR_4_PIN 11 //FC pin 10 (Tidak dipakai)
+//PIN FC BARU (Dibuat variabel float agar dapat dikonfigurasi via Params / EEPROM)
+// 13 DAN 33 TERBALIK
+// 36 DAN 37 TERBALIK
+float SERVO_RUD_L   = 2;   // pin 2  - MTR 1  (CH_MTR_1)
+float MOTOR_1_PIN   = 3;   // pin 3  - MTR 7  (Tidak dipakai)
+float SERVO_ELE     = 37;  // pin 37 - MTR 2  (CH_MTR_2)
+float MOTOR_2_PIN   = 5;   // pin 5  - MTR 8  (Tidak dipakai) - FC pin DICEK LAGI
+float SERVO_AIL_L   = 6;   // pin 6  - MTR 3  (CH_MTR_3)
+float MOTOR_3_PIN   = 9;   // pin 9  - MTR 9  (Tidak dipakai)
+float THROTTLE      = 10;  // pin 10 - MTR 4  (CH_MTR_4)
+float MOTOR_4_PIN   = 11;  // pin 11 - MTR 10 (Tidak dipakai)
+float SERVO_RUD_R   = 13;  // pin 13 - MTR 11 (CH_MTR_11)
+float SERVO_AIL_R   = 33;  // pin 33 - MTR 5  (CH_MTR_5)
+float SERVO_PAYLOAD = 36;  // pin 36 - MTR 6  (CH_MTR_6)
 
 // #define MTR_1_PIN 9  // MTR 9 (Throttle Kanan)
 // #define MTR_2_PIN 2  // MTR 1  (Throttle Kiri) - Changed from pin 6 to pin 2 (PWM capable, no conflicts)
@@ -126,44 +128,47 @@ void servo_idle() {
     servo_pwm_rud_R = 0;
 }
 
+extern float model_uav;
+
 void init_actuator() {
-    pinMode(SERVO_AIL_L, OUTPUT);
-    pinMode(SERVO_ELE, OUTPUT);
-    pinMode(SERVO_RUD_L, OUTPUT);
-    pinMode(SERVO_AIL_R, OUTPUT);
-    pinMode(SERVO_RUD_R, OUTPUT);
-    pinMode(THROTTLE, OUTPUT);
-    pinMode(MOTOR_1_PIN, OUTPUT);
-    pinMode(MOTOR_2_PIN, OUTPUT);
-    pinMode(MOTOR_3_PIN, OUTPUT);
-    pinMode(MOTOR_4_PIN, OUTPUT);
-    pinMode(SERVO_PAYLOAD, OUTPUT);
-    // pinMode(MTR_1_PIN, OUTPUT);
-    // pinMode(MTR_2_PIN, OUTPUT);
+    pinMode((int)SERVO_AIL_L, OUTPUT);
+    pinMode((int)SERVO_ELE, OUTPUT);
+    pinMode((int)SERVO_RUD_L, OUTPUT);
+    pinMode((int)SERVO_AIL_R, OUTPUT);
+    pinMode((int)SERVO_RUD_R, OUTPUT);
+    pinMode((int)THROTTLE, OUTPUT);
+    pinMode((int)SERVO_PAYLOAD, OUTPUT);
 
-    aileron_L.attach(SERVO_AIL_L);
-    elevator.attach(SERVO_ELE);
-    rudder_L.attach(SERVO_RUD_L);
-    aileron_R.attach(SERVO_AIL_R);
-    rudder_R.attach(SERVO_RUD_R);
-    payload.attach(SERVO_PAYLOAD);
-    pusher.attach(THROTTLE);
-    // mtr_1.attach(MTR_1_PIN);
-    // mtr_2.attach(MTR_2_PIN);
-    motor1.attach(MOTOR_1_PIN);
-    motor2.attach(MOTOR_2_PIN);
-    motor3.attach(MOTOR_3_PIN);
-    motor4.attach(MOTOR_4_PIN);
+    aileron_L.attach((int)SERVO_AIL_L);
+    elevator.attach((int)SERVO_ELE);
+    rudder_L.attach((int)SERVO_RUD_L);
+    aileron_R.attach((int)SERVO_AIL_R);
+    rudder_R.attach((int)SERVO_RUD_R);
+    payload.attach((int)SERVO_PAYLOAD);
+    pusher.attach((int)THROTTLE);
 
-    motor1.writeMicroseconds(988);
-    motor2.writeMicroseconds(988);
-    motor3.writeMicroseconds(988);
-    motor4.writeMicroseconds(988);
     pusher.writeMicroseconds(988);
-    // mtr_1.writeMicroseconds(988);
-    // mtr_2.writeMicroseconds(988);
     payload.writeMicroseconds(1000); // default hold
     servo_pwm_payload = 1000;        // make sure the variable is initialized
+
+    int model = (int)(model_uav + 0.5f);
+    if (model == 1) { // MODEL_UAV_VTOL
+        pinMode((int)MOTOR_1_PIN, OUTPUT);
+        pinMode((int)MOTOR_2_PIN, OUTPUT);
+        pinMode((int)MOTOR_3_PIN, OUTPUT);
+        pinMode((int)MOTOR_4_PIN, OUTPUT);
+
+        motor1.attach((int)MOTOR_1_PIN);
+        motor2.attach((int)MOTOR_2_PIN);
+        motor3.attach((int)MOTOR_3_PIN);
+        motor4.attach((int)MOTOR_4_PIN);
+
+        motor1.writeMicroseconds(988);
+        motor2.writeMicroseconds(988);
+        motor3.writeMicroseconds(988);
+        motor4.writeMicroseconds(988);
+        Serial.println("VTOL Motors initialized");
+    }
 
     Serial.println("Actuator setup complete");
 }

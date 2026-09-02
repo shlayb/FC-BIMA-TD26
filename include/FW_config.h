@@ -5,7 +5,7 @@
 //  Set to 1 to simulate via USB Python Bridge, 0 for real flight
 // ============================================================
 #ifndef HITL_ENABLED
-#define HITL_ENABLED 1
+#define HITL_ENABLED 0
 #endif
 
 // buat misi auto
@@ -18,10 +18,11 @@
 #define LOITER_RADIUS_DEFAULT 50
 #endif
 
+inline float rtl_altitude = 60.0f; // meter
 #ifndef ALT_HOLD_HOME
-#define ALT_HOLD_HOME 100
+#define ALT_HOLD_HOME rtl_altitude
 #endif
-#define ALT_HOLD_HOME_CM ALT_HOLD_HOME * 100
+#define ALT_HOLD_HOME_CM (rtl_altitude * 100.0f)
 
 #ifndef USE_CURRENT_ALT
 #define USE_CURRENT_ALT FALSE
@@ -32,7 +33,7 @@
 #define THROTTLE_MIN 0  // percent
 #endif
 #ifndef THROTTLE_CRUISE
-#define THROTTLE_CRUISE 55  // mode auto (percent) — harus sinkron dengan tecs_cruise_throttle!
+#define THROTTLE_CRUISE 60  // mode auto (percent) — harus sinkron dengan tecs_cruise_throttle!
 #endif
 #ifndef THROTTLE_MAX
 #define THROTTLE_MAX 100
@@ -67,18 +68,10 @@ inline float min_gndspeed         = 5.0f;  // m/s (safety floor angin sakal)
 #endif
 
 /** FLY BY WIRE AIRSPEED */
-#ifndef AIRSPEED_CRUISE
-#define AIRSPEED_CRUISE 21.0f  // 21 m/s target cruise groundspeed
-#endif
-#ifndef MIN_AIRSPEED
-#define MIN_AIRSPEED 12.0f  // m/s safety floor
-#endif
-#ifndef MAX_AIRSPEED
-#define MAX_AIRSPEED 30.0f
-#endif
-#ifndef AIRSPEED_STALL
-#define AIRSPEED_STALL 7.0f
-#endif
+inline float AIRSPEED_CRUISE = 21.0f;  // 21 m/s target cruise groundspeed
+inline float MIN_AIRSPEED    = 12.0f;  // m/s safety floor
+inline float MAX_AIRSPEED    = 30.0f;
+inline float AIRSPEED_STALL  = 7.0f;
 
 #ifndef SCALING_SPEED
 #define SCALING_SPEED 20.0f

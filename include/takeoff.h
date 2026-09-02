@@ -1,248 +1,208 @@
 #pragma once
-#include <Actuator.h>
-#include <Auto_setup.h>
-#include <bno055.h>
+#include <Arduino.h>
+#include "Actuator.h"
+#include "Auto_setup.h"
+#include "AHRS.h"
+#include "Barometer.h"
+#include "FW_config.h"
+#include "FW_control.h"
 
-// #define TAKEOFF_WITH_LAUCHER
+enum LaunchState : uint8_t {
+    LAUNCH_STATE_IDLE = 0,            // Belum aktif / Disarmed
+    LAUNCH_STATE_WAIT_GROUND,         // Di darat: Motor MATI TOTAL (988), menunggu lemparan/shake
+    LAUNCH_STATE_RELEASE_DELAY,       // Lemparan terdeteksi: Jeda aman 400ms agar tangan pilot aman lepas
+    LAUNCH_STATE_THROTTLE_RAMP,       // Ramp up throttle secara halus
+    LAUNCH_STATE_CLIMB,               // Mendaki stabil ke safe altitude
+    LAUNCH_STATE_COMPLETE             // Selesai takeoff -> navigasi waypoint L1 + TECS aktif penuh
+};
 
-bool entertakeoff = false;
-bool turn_on_throttle = false;
-float positive_counter = 0;
-float negative_counter = 0;
-static uint32_t last_negative_time = 0;
+class LaunchGuard {
+public:
+    LaunchState state = LAUNCH_STATE_IDLE;
+    
+    // Parameter peluncuran (ArduPilot TKOFF_* style, terdaftar di Params.h)
+    float throw_accel_thresh = 13.0f;    // TKOFF_THR_MINACC: m/s^2 linear accel untuk deteksi lemparan
+    float shake_accel_thresh = 9.0f;     // TKOFF_SHAKE_ACC:  m/s^2 untuk deteksi goyangan (shake)
+    float min_groundspeed_launch = 3.0f; // TKOFF_GND_SPD:   m/s min groundspeed jika dilempar cepat
+    float release_delay_ms = 400.0f;     // TKOFF_THR_DELAY:  ms jeda tangan menjauh sebelum motor hidup
+    float ramp_time_sec = 1.2f;          // TKOFF_THR_RAMP:   detik untuk ramp throttle dari 0 ke target
+    float safe_climb_alt = 15.0f;        // TKOFF_LVL_ALT:    meter AGL selesai fase climbout
+    float takeoff_pitch_deg = 15.0f;     // TKOFF_LVL_PITCH:  derajat pitch saat climbout
+    
+    uint32_t trigger_time_ms = 0;
+    uint32_t ramp_start_ms = 0;
+    float current_throttle_pwm = 988.0f;
+    
+    // Shake detection state
+    uint32_t last_shake_pos_ms = 0;
+    bool shake_pos_detected = false;
 
-const uint32_t TAKEOFF_DURATION = 3000;
-const int32_t MAX_THROTTLE_PERCENT = 99;
-
-bool no_launch() {
-    auto_takeoff_state.launchTimerStarted = false;
-    auto_takeoff_state.last_tkoff_arm_time = 0;
-    return false;
-}
-
-// void check_shake() {
-//     if (!auto_takeoff_check()) {
-//         Serial2.println("takeoff check false");
-//     }
-//     if (!no_launch()) {
-//         Serial2.println("no launch called");
-//     }
-//     Serial2.println("nothing false shake or no launch");
-// }
-
-void takeoff_calc_roll(void) {
-    calc_nav_roll();
-    // during takeoff use the level flight roll limit to prevent large
-    // wing strike. Slowly allow for more roll as we get higher above
-    // the takeoff altitude
-    int32_t takeoff_roll_limit = 20;   // roll limit untuk takeoff
-    float level_roll_limit = 10;       // meter
-    int32_t level_alt = 27;            // meter
-    int32_t target_alt = 30;           // meter
-    int16_t takeoff_rotate_speed = 0;  // For hand launch and catapult launches a TKOFF_ROTATE_SPD of zero should be set.
-
-    if (baro.getEAS2TAS() < takeoff_rotate_speed) {
-        // before Vrotate (aka, on the ground)
-        takeoff_roll_limit = level_roll_limit;
-    } else {
-        // lim1 - below altitude TKOFF_LVL_ALT, restrict roll to LEVEL_ROLL_LIMIT
-        // lim2 - above altitude (TKOFF_LVL_ALT * 3) allow full flight envelope of ROLL_LIMIT_DEG
-        // In between lim1 and lim2 use a scaled roll limit.
-        // The *3 scheme should scale reasonably with both small and large aircraft
-        const float lim1 = MAX(level_alt, 0);
-        const float lim2 = MIN(level_alt * 3, target_alt);
-        const float current_baro_alt = baro.altitude;
-
-        takeoff_roll_limit = linear_interpolate(level_roll_limit, 16,  // nilai roll limit
-                                                current_baro_alt,
-                                                auto_state.baro_takeoff_alt + lim1, auto_state.baro_takeoff_alt + lim2);
+    bool is_on_ground() const {
+        // Pesawat dianggap di darat jika ketinggian AGL < 4 meter dan groundspeed < 5 m/s
+        return (relative_alt < 4.0f && ahrs.groundspeed < 5.0f);
     }
 
-    nav_roll_deg = constrain(nav_roll_deg, -takeoff_roll_limit, takeoff_roll_limit);
-}
-
-// this function limit pitch during takeoff.
-void takeoff_calc_pitch(void) {
-    float dHeight;
-    float dDistance;
-
-    dHeight = (current_loc.alt - auto_takeoff_state.target_altitude) / 100.0f;
-    dDistance = current_loc.get_distance(next_WP_loc);
-    nav_pitch_deg = atan2f(dHeight, dDistance) * RAD_TO_DEG;
-}
-
-void takeoff_headlock() {
-    float head_error = imu.heading;
-
-    if (head_error < 180.0 && auto_takeoff_state.head_setpoint >= 180.0) {
-        head_error += 360.0;
-    } else if (head_error > 180.0 && auto_takeoff_state.head_setpoint <= 180.0) {
-        head_error -= 360.0;
-    }
-    value2 = head_error;
-    nav_roll_deg = auto_takeoff_state.head_setpoint - head_error;
-    nav_roll_deg = constrain_float(nav_roll_deg, -15.0f, 15.0f);
-}
-
-void takeoff_pitchlock(float deg) {
-    nav_pitch_deg = deg;
-    // servo_pwm_ele = 25.0f;
-}
-
-void trigger_autotakeoff() {
-    float takeoff_throttle_min_speed = 0.2f;   // groundspeed minimum untuk takeoff
-    float takeoff_throttle_min_accel = 20.0f;  // minimal kecepatan akselerasi untuk menyalakan motor
-    float xaccel = imu._linear_acc.y;
-    uint32_t current_takeoff_time = millis();
-
-    if (!arming) return;
-    if (gepees.gps_status < GPS_FIX_2D) return;
-
-#ifdef TAKEOFF_WITH_LAUCHER
-    if (xaccel >= takeoff_throttle_min_accel && groundspeed >= takeoff_throttle_min_accel) {
-        auto_takeoff_state.ready_for_throttle = true;
-        auto_takeoff_state.start_time_ms = current_takeoff_time;
-    }
-
-    if (auto_takeoff_state.ready_for_throttle && reached_approach_alt(altitude)) {
-        if ((current_takeoff_time - auto_takeoff_state.start_time_ms) >= 100) {
-            entertakeoff = true;
-            turn_on_throttle = true;
-        }
-    }
-#else
-    if (xaccel >= 6 && (current_takeoff_time - auto_takeoff_state.accel_event_ms) >= 200 && positive_counter < 2) {
-        positive_counter++;
-        auto_takeoff_state.accel_event_ms = current_takeoff_time;
-        auto_takeoff_state.start_time_ms = current_takeoff_time;
-    }
-
-    if (xaccel <= -6 && (current_takeoff_time - last_negative_time) >= 200 && negative_counter < 2) {
-        negative_counter++;
-        last_negative_time = current_takeoff_time;
-        auto_takeoff_state.start_time_ms = current_takeoff_time;
-    }
-
-    if (positive_counter >= 2 && negative_counter >= 2) {
-        if ((current_takeoff_time - auto_takeoff_state.start_time_ms) >= 500) {
-            entertakeoff = true;
-            turn_on_throttle = true;
-        }
-    }
-#endif
-}
-
-void takeoff_throtlle() {
-    float pwm;
-    // if (!auto_takeoff_state.doing) {
-    //     auto_takeoff_state.doing = true;
-    //     auto_takeoff_state.now = millis();
-    // }
-
-    // auto_takeoff_state.dtime = millis() - auto_takeoff_state.now;
-
-    if (auto_takeoff_state.throttle < 20) {
-        auto_takeoff_state.throttle += 5;  //= (int32_t)floor(auto_takeoff_state.dtime / TAKEOFF_DURATION * MAX_THROTTLE_PERCENT);
-        pwm = PercenttoPWM(auto_takeoff_state.throttle);
-        plane_motors_out_auto(pwm);
-        delay(450);
-
-        // if (auto_takeoff_state.dtime <= TAKEOFF_DURATION) {
-        //     auto_takeoff_state.throttle = (int32_t)floor(auto_takeoff_state.dtime / TAKEOFF_DURATION * MAX_THROTTLE_PERCENT);
-        //     pwm = PercenttoPWM(auto_takeoff_state.throttle);
-        //     plane_motors_out_auto(pwm);
-    } else {
-        pwm = PercenttoPWM(MAX_THROTTLE_PERCENT);
-        plane_motors_out_auto(pwm);
-        auto_takeoff_state.complete = true;
-    }
-}
-
-bool auto_takeoff_check(void) {
-    // TAKEOFF PARAMETER
-    float takeoff_throttle_delay = 2.0f;       // waktu delay setelah diarm
-    float takeoff_throttle_min_speed = 0.1f;   // groundspeed minimum untuk takeoff
-    float takeoff_throttle_min_accel = 15.0f;  // minimal kecepatan akselerasi untuk menyalakan motor
-    int16_t takeoff_throttle_accel_count = 1;  // banyak akselerasi sebelum motor hidup
-
-    // this is a more advanced check that relies on TECS
-    uint32_t now = millis();
-    uint16_t wait_time_ms = MIN(uint16_t(takeoff_throttle_delay) * 100, 12700);
-
-    // reset all takeoff state if disarmed
-    if (!arming) {
-        // memset(&auto_takeoff_state, 0, sizeof(auto_takeoff_state));
-        auto_state.baro_takeoff_alt = baro.altitude;
-        return false;
-    }
-
-    // Reset states if process has been interrupted
-    if (auto_takeoff_state.last_check_ms && (now - auto_takeoff_state.last_check_ms) > 200) {
-        // memset(&auto_takeoff_state, 0, sizeof(auto_takeoff_state));
-        return false;
-    }
-
-    auto_takeoff_state.last_check_ms = now;
-
-    // Check for bad GPS
-    if (gepees.gps_status < GPS_FIX_2D) {
-        // no auto takeoff without GPS lock
-        // return false;
-    }
-
-    // buat shake to takoff ,cariin yg salah ya :)
-    if (!auto_takeoff_state.launchTimerStarted && !is_zero(takeoff_throttle_min_accel)) {
-        // we are requiring an X acceleration event to launch
-        float xaccel = imu._linear_acc.y;
-        if (takeoff_throttle_accel_count <= 1) {
-            if (xaccel < takeoff_throttle_min_accel) {
-                return no_launch();
-            }
+    void reset() {
+        if (is_on_ground()) {
+            state = LAUNCH_STATE_WAIT_GROUND;
         } else {
-            // we need multiple accel events
-            if (now - auto_takeoff_state.accel_event_ms > 500) {
-                auto_takeoff_state.accel_event_counter = 0;
-            }
-            bool odd_event = ((auto_takeoff_state.accel_event_counter & 1) != 0);
-            bool got_event = (odd_event ? xaccel < -takeoff_throttle_min_accel : xaccel > takeoff_throttle_min_accel);
-            if (got_event) {
-                auto_takeoff_state.accel_event_counter++;
-                auto_takeoff_state.accel_event_ms = now;
-            }
-            if (auto_takeoff_state.accel_event_counter < takeoff_throttle_accel_count) {
-                return no_launch();
-            }
+            state = LAUNCH_STATE_COMPLETE;
+        }
+        current_throttle_pwm = 988.0f;
+        shake_pos_detected = false;
+        trigger_time_ms = 0;
+        ramp_start_ms = 0;
+    }
+
+    void on_enter_auto() {
+        reset();
+        if (state == LAUNCH_STATE_WAIT_GROUND) {
+            Serial.println("[LAUNCH] AUTO entered on GROUND -> Motor LOCKED (OFF: 988). Waiting for Throw/Shake...");
+        } else {
+            Serial.println("[LAUNCH] AUTO entered in AIR -> Normal flight active");
         }
     }
 
-    // we've reached the acceleration threshold, so start the timer
-    if (!auto_takeoff_state.launchTimerStarted) {
-        auto_takeoff_state.launchTimerStarted = true;
-        auto_takeoff_state.last_tkoff_arm_time = now;
-        if (now - auto_takeoff_state.last_report_ms > 2000) {
-            auto_takeoff_state.last_report_ms = now;
+    void on_exit_auto() {
+        reset();
+    }
+
+    bool is_launch_complete() const {
+        return (state == LAUNCH_STATE_COMPLETE);
+    }
+
+    void update(float &pitch_dem_out, float &roll_dem_out, float &throttle_pwm_out) {
+        // JIKA DISARMED: Motor DIJAMIN MATI (988) dan state disiapkan ke WAIT_GROUND
+        if (!arming) {
+            reset();
+            throttle_pwm_out = 988.0f;
+            return;
+        }
+
+        uint32_t now = millis();
+        // Linear acceleration magnitude (orientation-safe horizontal)
+        float horiz_accel = sqrtf(imu._linear_acc.x * imu._linear_acc.x + imu._linear_acc.y * imu._linear_acc.y);
+        float max_lin_acc = max(fabsf(imu._linear_acc.x), fabsf(imu._linear_acc.y));
+
+        switch (state) {
+            case LAUNCH_STATE_IDLE: {
+                throttle_pwm_out = 988.0f;
+                current_throttle_pwm = 988.0f;
+                if (is_on_ground()) {
+                    state = LAUNCH_STATE_WAIT_GROUND;
+                } else {
+                    state = LAUNCH_STATE_COMPLETE;
+                }
+                break;
+            }
+
+            // ------------------------------------------------------------
+            // 1. DI DARAT: MOTOR MATI TOTAL (988), TUNGGU LEMPARAN / SHAKE
+            // ------------------------------------------------------------
+            case LAUNCH_STATE_WAIT_GROUND: {
+                throttle_pwm_out = 988.0f; // MOTOR DIJAMIN MATI (988)
+                current_throttle_pwm = 988.0f;
+                roll_dem_out = 0.0f;       // Sayap datar
+                pitch_dem_out = 5.0f;      // Standby pitch
+
+                // Deteksi A: Forward Throw (Lemparan kuat ke depan atau didorong cepat)
+                bool throw_detected = (horiz_accel >= throw_accel_thresh) || 
+                                     (ahrs.haveGPS() && ahrs.groundspeed >= min_groundspeed_launch);
+
+                // Deteksi B: Shake to Launch (Goyangan maju-mundur/kiri-kanan)
+                if (max_lin_acc >= shake_accel_thresh) {
+                    shake_pos_detected = true;
+                    last_shake_pos_ms = now;
+                }
+                bool shake_detected = false;
+                if (shake_pos_detected) {
+                    if (now - last_shake_pos_ms <= 800) {
+                        // Goyangan balasan terdeteksi
+                        if (max_lin_acc >= (shake_accel_thresh * 0.8f) && (now - last_shake_pos_ms >= 50)) {
+                            shake_detected = true;
+                        }
+                    } else {
+                        shake_pos_detected = false;
+                    }
+                }
+
+                if (throw_detected || shake_detected) {
+                    state = LAUNCH_STATE_RELEASE_DELAY;
+                    trigger_time_ms = now;
+                    Serial.printf("[LAUNCH] Trigger detected! (%s) -> Hand release delay (%.0f ms)...\n",
+                                  throw_detected ? "THROW" : "SHAKE", release_delay_ms);
+                }
+                break;
+            }
+
+            // ------------------------------------------------------------
+            // 2. JEDA PELEPASAN TANGAN: MOTOR TETAP MATI (400ms)
+            // ------------------------------------------------------------
+            case LAUNCH_STATE_RELEASE_DELAY: {
+                throttle_pwm_out = 988.0f; // MOTOR TETAP MATI
+                roll_dem_out = 0.0f;
+                pitch_dem_out = takeoff_pitch_deg;
+
+                if (now - trigger_time_ms >= (uint32_t)release_delay_ms) {
+                    state = LAUNCH_STATE_THROTTLE_RAMP;
+                    ramp_start_ms = now;
+                    Serial.println("[LAUNCH] Hand clear -> Ramping throttle up...");
+                }
+                break;
+            }
+
+            // ------------------------------------------------------------
+            // 3. THROTTLE RAMP UP: NAIK SECARA HALUS DARI 0 KE TARGET
+            // ------------------------------------------------------------
+            case LAUNCH_STATE_THROTTLE_RAMP: {
+                float progress = (float)(now - ramp_start_ms) / (ramp_time_sec * 1000.0f);
+                progress = constrain(progress, 0.0f, 1.0f);
+
+                int target_thr_pwm = fw_control.get_auto_throttle();
+                if (target_thr_pwm < 1550) target_thr_pwm = 1650; // Minimum climb throttle
+
+                current_throttle_pwm = 988.0f + progress * (target_thr_pwm - 988.0f);
+                throttle_pwm_out = current_throttle_pwm;
+
+                // Batasi roll agar tidak miring saat awal takeoff
+                roll_dem_out = constrain(nav_roll_deg, -10.0f, 10.0f);
+                pitch_dem_out = takeoff_pitch_deg;
+
+                if (progress >= 1.0f) {
+                    state = LAUNCH_STATE_CLIMB;
+                    Serial.println("[LAUNCH] Ramp complete -> Climbing to safe altitude...");
+                }
+                break;
+            }
+
+            // ------------------------------------------------------------
+            // 4. CLIMB OUT: MENDAKI STABIL KE KETINGGIAN AMAN
+            // ------------------------------------------------------------
+            case LAUNCH_STATE_CLIMB: {
+                throttle_pwm_out = fw_control.get_auto_throttle();
+                if (throttle_pwm_out < 1550) throttle_pwm_out = 1650;
+
+                roll_dem_out = constrain(nav_roll_deg, -12.0f, 12.0f);
+                pitch_dem_out = takeoff_pitch_deg;
+
+                if (relative_alt >= safe_climb_alt) {
+                    state = LAUNCH_STATE_COMPLETE;
+                    Serial.println("[LAUNCH] Safe altitude reached -> FULL WAYPOINT NAVIGATION ACTIVE!");
+                }
+                break;
+            }
+
+            // ------------------------------------------------------------
+            // 5. SELESAI: KONTROL PENUH OLEH L1 & TECS
+            // ------------------------------------------------------------
+            case LAUNCH_STATE_COMPLETE: {
+                throttle_pwm_out = fw_control.get_auto_throttle();
+                pitch_dem_out = nav_pitch_deg;
+                roll_dem_out = nav_roll_deg;
+                break;
+            }
         }
     }
+};
 
-    // Only perform velocity check if not timed out
-    if ((now - auto_takeoff_state.last_tkoff_arm_time) > wait_time_ms + 100U) {
-        if (now - auto_takeoff_state.last_report_ms > 2000) {
-            auto_takeoff_state.last_report_ms = now;
-        }
-        return no_launch();
-    }
-
-    // Check ground speed and time delay
-    if (((ahrs.groundspeed > takeoff_throttle_min_speed || is_zero(takeoff_throttle_min_speed))) &&
-        ((now - auto_takeoff_state.last_tkoff_arm_time) >= wait_time_ms)) {
-        auto_takeoff_state.launchTimerStarted = false;
-        auto_takeoff_state.last_tkoff_arm_time = 0;
-        auto_takeoff_state.start_time_ms = now;
-        entertakeoff = true;
-        turn_on_throttle = true;
-        return true;
-    }
-
-    // we're not launching yet, but the timer is still going
-    return false;
-}
+inline LaunchGuard launch_guard;
