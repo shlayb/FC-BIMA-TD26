@@ -147,9 +147,18 @@ protected:
     ahrs.update_ahrs();
     nav_gps();
     
+    // Cek jika seluruh waypoint misi telah selesai -> transisi ke RTL
+    if (flag_wp >= wp_sum && wp_sum > 0) {
+        mode_now = 5;
+        modes.setMode(ModeId::RTL);
+        active_mode = ModeId::RTL;
+        current = ModeId::RTL;
+        return;
+    }
+
     mode_fbwa_plane = true;
     navigate();
-    if (active_mode != ModeId::AUTO || current != ModeId::AUTO || mode_now == 5) {
+    if (active_mode != ModeId::AUTO || current != ModeId::AUTO || mode_now == 5 || (flag_wp >= wp_sum && wp_sum > 0)) {
         return;
     }
     update_speed_height();
@@ -236,6 +245,9 @@ class ModeRTL_FW : public ModeBase {
 public:
   ModeId id() const override { return ModeId::RTL; }
 
+private:
+  Locations rtl_start_loc{};
+
 protected:
   bool _enter() override {
     auto_throttle_mode = true;
@@ -246,9 +258,13 @@ protected:
     current = ModeId::RTL;
     mode_now = 5;
     
-    // Ketinggian aman RTL: 60 meter di atas HOME
-    target_altitude.amsl_cm = 60 * M_TO_CM;
+    // Simpan posisi saat RTL dimulai sebagai titik awal garis lintasan
+    rtl_start_loc = current_loc;
+    
+    // Ketinggian aman RTL: rtl_altitude (default 60m) di atas HOME
+    target_altitude.amsl_cm = (int32_t)(rtl_altitude * M_TO_CM);
     target_airspeed = AIRSPEED_CRUISE;
+    Serial.println("[MODE] >>> ENTERING RTL MODE (Returning Home) <<<");
     return true;
   }
 
@@ -270,8 +286,8 @@ protected:
     float dist_to_home = current_loc.get_distance(home_loc);
 
     if (dist_to_home > (LOITER_RADIUS_DEFAULT + 15.0f)) {
-        // Fase 1: Terbang langsung menuju HOME
-        update_waypoint(current_loc, home_loc, 0.0f);
+        // Fase 1: Terbang langsung menuju HOME sepanjang garis jalur start -> HOME
+        update_waypoint(rtl_start_loc, home_loc, 0.0f);
     } else {
         // Fase 2: Sudah di area HOME -> Orbit Loiter melingkar 50m radius (Clockwise)
         update_loiter(home_loc, LOITER_RADIUS_DEFAULT, 1);

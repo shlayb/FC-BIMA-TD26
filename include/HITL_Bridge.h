@@ -204,13 +204,8 @@ public:
         }
 
         if (pkt.flags & 0x04) {
-            // Force AUTO Mode: hanya saat mission belum mulai/di tengah jalan
-            // JANGAN force AUTO jika:
-            //  - current sudah RTL (misi selesai)
-            //  - mode_now sudah 5 (navigate() baru saja minta RTL, belum diproses setup_mode())
-            //  - flag_wp >= wp_sum (semua waypoint misi selesai)
-            //  - current sudah AUTO (tidak perlu force ulang)
-            if (current != ModeId::AUTO && current != ModeId::RTL && mode_now != 5 && (wp_sum == 0 || flag_wp < wp_sum)) {
+            // Force AUTO Mode hanya saat startup awal dari MANU
+            if (current == ModeId::MANU) {
                 mode_now = 3;
                 modes.setMode(ModeId::AUTO);
                 active_mode = ModeId::AUTO;

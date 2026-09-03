@@ -177,13 +177,15 @@ void navigate() {
         return;
     }
 
-    if (auto_navigation_mode) {
-        if (flag_wp <= 0) {
-            flag_wp = 1;
-            auto_state.next_wp_crosstrack = false;
-            target_altitude.amsl_cm = waypoint[flag_wp].alt;
-            set_next_WP(waypoint[flag_wp]);
-        }
+    if (current == ModeId::RTL || !auto_navigation_mode) {
+        return;
+    }
+
+    if (flag_wp <= 0) {
+        flag_wp = 1;
+        auto_state.next_wp_crosstrack = false;
+        target_altitude.amsl_cm = waypoint[flag_wp].alt;
+        set_next_WP(waypoint[flag_wp]);
     }
 
     else if (auto_takeoff_mode) {
