@@ -219,6 +219,7 @@ void controlThd(void *pvParameters){
         modes.registerMode(&mGUIDED_FW);
         modes.registerMode(&mAUTO_FW);
         modes.registerMode(&mRTL_FW);
+        modes.registerMode(&mLOITER_FW);
         modes.setMode(ModeId::MANU);
 
     } else if (model == MODEL_UAV_VTOL) {
@@ -226,6 +227,7 @@ void controlThd(void *pvParameters){
         modes.registerMode(&mFBWA_FW);
         modes.registerMode(&mAUTO_FW);
         modes.registerMode(&mRTL_FW);
+        modes.registerMode(&mLOITER_FW);
         modes.registerMode(&mQHOV);
         modes.registerMode(&mCOPT);
     }
@@ -267,6 +269,8 @@ void printUSB() {
         if (c == 'x') mode_now = 2;
         if (c == 'c') mode_now = 3;
         if (c == 'v') mode_now = 4;
+        if (c == 'b') mode_now = 5;  // RTL
+        if (c == 'n') mode_now = 6;  // LOITER
     }
  
     Serial.print("Arm:");      Serial.print(arming);    

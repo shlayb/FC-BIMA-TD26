@@ -3,7 +3,7 @@
 
 extern int mode_phase,Mode;
 
-enum class ModeId : uint8_t { COPT, QHOV, GUIDED, MANU, FBWA, AUTO, TRNS, RTL, COUNT };
+enum class ModeId : uint8_t { COPT, QHOV, GUIDED, MANU, FBWA, AUTO, TRNS, RTL, LOITER, COUNT };
 
 extern ModeId current;
 extern ModeId active_mode;
@@ -18,6 +18,7 @@ static inline const char* modeCode4(ModeId id){
     case ModeId::GUIDED: return "GUID";
     case ModeId::TRNS: return "TRNS";
     case ModeId::RTL: return "RTL ";
+    case ModeId::LOITER: return "LOIT";
     // case ModeId::FIXEDWING: return "FIXEDWING";
     default: return "UNKN";
   }

@@ -329,22 +329,33 @@ void MavlinkHandler::applyRcToGlobals(uint16_t c1, uint16_t c2, uint16_t c3,
     apply(ch_mode,         c6);
     apply(ch_mode_backup,         c7);
 
-
-            if (ch_mode < 1000) {  // Channel 6 low - Regular modes (1,2,3)
-            if (ch_mode_backup <= 1000) {
-                mode_now = 1;  // Mode 1: Both channels low
-            } else if (ch_mode_backup > 1000 && ch_mode_backup <= 1512) {
-                mode_now = 2;  // Mode 2: Ch7 middle
-            } else if (ch_mode_backup >= 1512) {
-                mode_now = 3;  // Mode 3: Ch7 high
-            }
-        } else {  // Channel 6 middle/high - Special modes (4,5)
-            if (ch_mode > 1000 && ch_mode <= 1512 && ch_mode_backup >= 1512) {
-                mode_now = 4;  // Mode 4: Ch6 middle, Ch7 high
-            } else if (ch_mode >= 1512 && ch_mode_backup >= 1512) {
-                mode_now = 5;  // Mode 5: Both channels high
-            }
+    int target_mav_mode = 0;
+    if (ch_mode < 1300) {  // Bank 1: Regular modes (1, 2, 3)
+        if (ch_mode_backup < 1300) {
+            target_mav_mode = 1;  // Mode 1: MANU
+        } else if (ch_mode_backup < 1700) {
+            target_mav_mode = 2;  // Mode 2: FBWA
+        } else {
+            target_mav_mode = 3;  // Mode 3: AUTO
         }
+    } else {  // Bank 2: Special modes (4, 5, 6)
+        if (ch_mode_backup < 1300) {
+            target_mav_mode = 4;  // Mode 4: GUIDED
+        } else if (ch_mode_backup < 1700) {
+            target_mav_mode = 5;  // Mode 5: RTL
+        } else {
+            target_mav_mode = 6;  // Mode 6: LOITER
+        }
+    }
+
+    static int last_mav_mode = -1;
+    if (last_mav_mode == -1) {
+        last_mav_mode = target_mav_mode;
+        mode_now = target_mav_mode;
+    } else if (target_mav_mode != last_mav_mode) {
+        last_mav_mode = target_mav_mode;
+        mode_now = target_mav_mode;
+    }
     apply(ch_vehicle_mode,         c8);
 
     g_rcStatus.valid        = true;
@@ -606,6 +617,7 @@ void MavlinkHandler::handleCommandLong(const mavlink_message_t& msg) {
             else if (custom_mode == 10) { new_mode = 3; mode_name = "AUTO"; new_mode_id = ModeId::AUTO; }  
             else if (custom_mode == 4)  { new_mode = 4; mode_name = "GUIDED"; new_mode_id = ModeId::GUIDED; } 
             else if (custom_mode == 11) { new_mode = 5; mode_name = "RTL"; new_mode_id = ModeId::RTL; } 
+            else if (custom_mode == 12) { new_mode = 6; mode_name = "LOITER"; new_mode_id = ModeId::LOITER; } 
             else {
                 result = MAV_RESULT_UNSUPPORTED;
                 sendStatusText(MAV_SEVERITY_WARNING, "MODE NOT SUPPORTED");
@@ -1045,6 +1057,7 @@ uint32_t MavlinkHandler::getCustomMode() const {
         case ModeId::GUIDED: return 4;
         case ModeId::AUTO:   return 10;
         case ModeId::RTL:    return 11;
+        case ModeId::LOITER: return 12;
         default:           return 0;
     }
 }

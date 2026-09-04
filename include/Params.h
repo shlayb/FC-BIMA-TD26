@@ -34,6 +34,10 @@ extern float MAX_AIRSPEED;
 extern float AIRSPEED_STALL;
 extern float rtl_altitude;
 
+// Loiter variables
+extern float loiter_mode_radius;
+extern float loiter_bank_limit;
+
 // ============================================================
 //  Param dengan pointer langsung ke variabel aslinya
 //  Ketika nilai diubah, variabel target langsung berubah
@@ -146,7 +150,7 @@ inline void initParams() {
     g_params[i++] = {"TKOFF_THR_MINACC",&launch_guard.throw_accel_thresh,      13.0f,   5.0f,  35.0f};      // Accel lempar (m/s^2)
     g_params[i++] = {"TKOFF_THR_DELAY", &launch_guard.release_delay_ms,       400.0f,   0.0f,2000.0f};      // Jeda lepas tangan (ms)
     g_params[i++] = {"TKOFF_THR_RAMP",  &launch_guard.ramp_time_sec,            1.2f,   0.1f,   5.0f};      // Durasi ramp throttle (s)
-    g_params[i++] = {"TKOFF_SHAKE_ACC", &launch_guard.shake_accel_thresh,       9.0f,   3.0f,  25.0f};      // Accel shake-to-wake (m/s^2)
+    g_params[i++] = {"TKOFF_SHAKE_ACC", &launch_guard.shake_accel_thresh,       5.0f,   3.0f,  25.0f};      // Accel shake-to-wake (m/s^2)
     g_params[i++] = {"TKOFF_GND_SPD",   &launch_guard.min_groundspeed_launch,   3.0f,   0.5f,  15.0f};      // Min groundspeed launch (m/s)
 
     // ============================================================
@@ -163,6 +167,12 @@ inline void initParams() {
     g_params[i++] = {"CH_MTR_9",        &MOTOR_3_PIN,                           9.0f,   0.0f,  41.0f};
     g_params[i++] = {"CH_MTR_10",       &MOTOR_4_PIN,                          11.0f,   0.0f,  41.0f};
     g_params[i++] = {"CH_MTR_11",       &SERVO_RUD_R,                          13.0f,   0.0f,  41.0f};
+
+    // ============================================================
+    //  LOITER MODE PARAMETERS
+    // ============================================================
+    g_params[i++] = {"FW_LOIT_RAD",    &loiter_mode_radius,                  50.0f,  20.0f, 500.0f};
+    g_params[i++] = {"FW_LOIT_BANK",   &loiter_bank_limit,                   35.0f,  15.0f,  60.0f};
 
     PARAM_COUNT = i;
 }

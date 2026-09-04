@@ -56,11 +56,18 @@ void setup_mode() {
                 current = ModeId::AUTO;
             }
         }
-        else if (mode_now == 5) {
+        else if (mode_now == 6) {
             if (active_mode != ModeId::RTL) {
                 modes.setMode(ModeId::RTL);
                 active_mode = ModeId::RTL;
                 current = ModeId::RTL;
+            }
+        }
+        else if (mode_now == 5) {
+            if (active_mode != ModeId::LOITER) {
+                modes.setMode(ModeId::LOITER);
+                active_mode = ModeId::LOITER;
+                current = ModeId::LOITER;
             }
         }
 
@@ -84,6 +91,8 @@ void setup_mode() {
         // 2 = Fixed Wing / FBWA
         // 3 = AUTO
         // 4 = GUIDED
+        // 5 = RTL
+        // 6 = LOITER
 
         if (mode_now == 1) {
 
@@ -118,6 +127,14 @@ void setup_mode() {
 
         else if (mode_now == 4) {
             want = ModeId::FBWA;
+        }
+
+        else if (mode_now == 5) {
+            want = ModeId::RTL;
+        }
+
+        else if (mode_now == 6) {
+            want = ModeId::LOITER;
         }
 
         else {
