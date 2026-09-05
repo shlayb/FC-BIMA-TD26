@@ -96,6 +96,10 @@ class IST8310 {
     float mag_x_ut = 0, mag_y_ut = 0, mag_z_ut = 0;
 
     void startMeasurement() {
+        // Balik ke standby dulu sebelum single-shot berikutnya — beberapa unit
+        // IST8310 tidak retrigger kalau CNTL1 ditulis 0x01 dua kali berturutan
+        // tanpa transisi lewat standby (0x00).
+        i2c.writeByte(addr, IST8310_REG_CNTL1, IST8310_CNTL1_STANDBY);
         i2c.writeByte(addr, IST8310_REG_CNTL1, IST8310_CNTL1_SINGLE);
     }
 };
