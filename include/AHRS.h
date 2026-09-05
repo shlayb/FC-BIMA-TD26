@@ -29,12 +29,15 @@
 #include <Arduino.h>
 #include <Locations.h>
 #include "Barometer.h"
+#include "Compass.h"
 #include "NavEKF.h"
 #include "airspeed.h"
 #include "bno055.h"
 #include "gps.h"
 
+// Holybro M10 GPS: NMEA UART on RX28/TX29, onboard IST8310 compass on I2C (Wire2 -> pin SDA25/SCL24)
 Gepees gepees(28, 29, 38400);
+Compass compass;
 Airspeed arspd;
 IMU imu;
 
@@ -348,6 +351,7 @@ void AHRS::get_relative_position_D_home(float &posD) const {
 void AHRS::init_ahrs() {
     imu.init_imu();
     gepees.initGPS();
+    compass.init_compass();
     arspd.initAirspeed();
     baro.init_baro();
 }

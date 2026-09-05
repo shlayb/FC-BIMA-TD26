@@ -39,6 +39,7 @@
 #define IMU_time      5     // 200 Hz
 #define BARO_time     10    // 100 Hz
 #define GPS_time      10    // 100 Hz
+#define COMPASS_time  50    //  20 Hz — IST8310 onboard modul GPS M10 (I2C)
 #define AIRSPEED_time 50    //  20 Hz
 #define PRINT_time    50    //  20 Hz
 #define CONTROL_time  5     // 200 Hz  — sinkron dengan IMU
@@ -84,6 +85,7 @@ SemaphoreHandle_t xSerialMutex; // guard Serial USB agar tidak tabrakan
 TaskHandle_t Task_IMU;
 TaskHandle_t Task_BARO;
 TaskHandle_t Task_GPS;
+TaskHandle_t Task_Compass;
 TaskHandle_t Task_Print;
 TaskHandle_t Task_Raspi;
 TaskHandle_t Task_Telem;
@@ -144,6 +146,15 @@ void GPS(void *pvParameters){
         gepees.updateGPS();
 #endif
         vTaskDelay(pdMS_TO_TICKS(GPS_time)); // Reduced delay for more frequent updates
+    }
+};
+
+void Compass_task(void *pvParameters){
+    for(;;){
+#if !HITL_ENABLED
+        compass.update_compass();
+#endif
+        vTaskDelay(pdMS_TO_TICKS(COMPASS_time));
     }
 };
 
@@ -408,6 +419,7 @@ void setup() {
     xTaskCreate(mavlink_print,"Mavlink", 8192, NULL,  5,  &Task_Mavlink); // 100 Hz real-time
     xTaskCreate(radio,        "Radio",   4096, NULL,  5,  &Task_Radio);   // 100 Hz
     xTaskCreate(GPS,          "GPS",     4096, NULL,  4,  &Task_GPS);     // 100 Hz — string parsing
+    xTaskCreate(Compass_task, "Compass", 2048, NULL,  3,  &Task_Compass); //  20 Hz — IST8310 GPS M10
     xTaskCreate(updateBARO,   "BARO",    2048, NULL,  3,  &Task_BARO);    // 100 Hz
     // xTaskCreate(fwRoll,       "FWRoll",  4096, NULL,  3,  &Task_FWRoll);  // 50 Hz
     xTaskCreate(airspeed,     "Airspeed",2048, NULL,  3,  &Task_Airspeed);// 20 Hz
