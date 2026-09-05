@@ -61,7 +61,18 @@ class IMU{
         void imu_thread();
         void imu_task();
 
+        // Dipakai saat BNO055 tidak terdeteksi: heading/yaw diambil dari
+        // kompas eksternal (mis. IST8310 modul GPS M10) sebagai pengganti
+        // sementara. Roll/pitch tidak bisa digantikan kompas, tetap 0.
+        bool isBNOConnected() const { return bno_ok; }
+        void useExternalHeading(float heading_deg) {
+            heading = heading_deg;
+            yaw = calc_yaw(heading);
+            rad_yaw = radians(yaw);
+        }
+
     private:
+        bool bno_ok = false;
         struct bno055_t bno_data;              
         struct bno055_euler bno_euler;     
         struct bno055_gyro bno_gyro;      
@@ -155,9 +166,16 @@ void IMU::init_imu() {
     BNO_Init(&bno_data);
     bno055_set_operation_mode(OPERATION_MODE_NDOF);
     delay(1 << 9);
+
+    bno_ok = (bno_data.chip_id == 0xA0);  // BNO055 chip ID sesuai datasheet Bosch
+    if (!bno_ok) {
+        Serial.println("[IMU] BNO055 tidak terdeteksi, heading fallback ke kompas GPS M10");
+    }
 }
 
 void IMU::update_imu() {
+    if (!bno_ok) return;  // tanpa BNO055: heading di-supply dari luar via useExternalHeading()
+
     extract_linear_accelerometer();
     extract_euler();
     extract_gyroscope();

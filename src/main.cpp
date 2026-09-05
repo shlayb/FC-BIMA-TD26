@@ -153,6 +153,9 @@ void Compass_task(void *pvParameters){
     for(;;){
 #if !HITL_ENABLED
         compass.update_compass();
+        if (!imu.isBNOConnected() && compass.isConnected()) {
+            imu.useExternalHeading(compass.getHeadingDeg());
+        }
 #endif
         vTaskDelay(pdMS_TO_TICKS(COMPASS_time));
     }
