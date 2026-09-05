@@ -35,8 +35,9 @@
 #include "bno055.h"
 #include "gps.h"
 
-// Holybro M10 GPS: NMEA UART on RX28/TX29, onboard IST8310 compass on I2C (Wire2 -> pin SDA25/SCL24)
-Gepees gepees(28, 29, 38400);
+// Holybro M10 GPS: UART on Serial7 (RX28/TX29 hardware pin Teensy 4.1), baud default modul = 115200.
+// Onboard IST8310 compass di I2C (Wire2 -> pin SDA25/SCL24).
+Gepees gepees(Serial7, 115200);
 Compass compass;
 Airspeed arspd;
 IMU imu;
@@ -222,7 +223,7 @@ void AHRS::driftCorrection() {
     float cos_heading = cosf(radians(imu.heading));
     bool is_gps_fix = gepees.age > 0 && gepees.age < 3000;
 
-    if (is_gps_fix || gepees.gps_status >= GPS_FIX_3D || gepees.gps.speed.isUpdated()) {
+    if (is_gps_fix || gepees.gps_status >= GPS_FIX_3D) {
         groundspeed = gepees.speed_mps;  // ini dicek lagi, kalau terbang jangan (* 1000)
         velocity_vector = gepees.velocity;
         is_gps_lock = true;

@@ -138,6 +138,7 @@ private:
     static const unsigned long SERVO_OUTPUT_MS   = 100;   // 10Hz (untuk tab Servo Output GCS)
     static const unsigned long RC_CHANNELS_MS    = 100;   // 10Hz (untuk tab Radio In GCS)
     static const unsigned long SCALED_PRESSURE_MS= 200;   // 5Hz (Pitot differential pressure for GCS airspeed detection)
+    static const unsigned long GPS_DEBUG_MS      = 3000;  // debug status GPS M10 ke tab Messages GCS
 
     static constexpr float     ALERT_THRESHOLD_DEG = 40.0f;
     static const unsigned long ALERT_DEBOUNCE_MS   = 2000;
@@ -159,6 +160,7 @@ private:
     unsigned long lastRcChannels    = 0;
     unsigned long lastWpCount       = 0;  // Timer untuk mengirim total WP ke RPI
     unsigned long lastScaledPressure= 0;
+    unsigned long lastGpsDebug      = 0;
 
     // --- MAVLink buffers ---
     mavlink_status_t  st_usb, st_tlm, st_rpi;
@@ -293,7 +295,6 @@ void MavlinkHandler::mavSendAll(const mavlink_message_t& msg) {
     // - kalau tidak sedang upload mission: kirim normal
     // - kalau sedang upload mission: hanya izinkan pesan mission
     if (mission_state != MISSION_RECEIVING || isMissionMessage(msg.msgid)) {
-        mavWrite(Serial7, msg);   // RPi UART
         mavWrite(Serial1, msg);   // RPi UART
     }
 }
@@ -302,7 +303,6 @@ void MavlinkHandler::replyTarget(const mavlink_message_t& msg) {
     // Send hanya ke port yang kirim pesan
     if (current_port == PORT_USB) mavWriteUSB(Serial, msg);
     else if (current_port == PORT_TLM) mavWrite(Serial2, msg);
-    else if (current_port == PORT_RPI) mavWrite(Serial7, msg);
     else if (current_port == PORT_RPI) mavWrite(Serial1, msg);
 }
 
@@ -526,7 +526,6 @@ void MavlinkHandler::forwardToOthers(const mavlink_message_t& msg, PortId from) 
     }
     
     if (from != PORT_TLM) mavWrite(Serial2, msg);
-    if (from != PORT_RPI) mavWrite(Serial7, msg);
     if (from != PORT_RPI) mavWrite(Serial1, msg);
 }
 
@@ -1251,7 +1250,6 @@ void MavlinkHandler::sendMissionCountToRPI() {
     mavlink_msg_mission_count_pack(SYSTEM_ID, COMPONENT_ID, &msg,
                                    0, MAV_COMP_ID_ALL, wp_sum,
                                    MAV_MISSION_TYPE_MISSION);
-    mavWrite(Serial7, msg);
     mavWrite(Serial1, msg);
 }
 
@@ -1289,6 +1287,24 @@ void MavlinkHandler::mavlinkTask() {
                       (uint16_t)(gepees.speed_mps * 100),
                       imu.heading,
                       gepees.satellites);
+    }
+
+    // Debug GPS M10: cek apakah UBX (NAV-PVT) benar-benar diterima & berapa satelit
+    if (now - lastGpsDebug >= GPS_DEBUG_MS) {
+        lastGpsDebug = now;
+        char gps_dbg[90];
+        snprintf(gps_dbg, sizeof(gps_dbg), "GPS M10: baud=%lu ubx=%d fixType=%d sat=%d pdop=%.1f pkt=%lu",
+                 (unsigned long)gepees.baudRate, (int)gepees.ubx_handshake_ok,
+                 (int)gepees.fixType, (int)gepees.satellites, gepees.hdop,
+                 (unsigned long)gepees.ubxPacketsOk);
+        sendStatusText(MAV_SEVERITY_INFO, gps_dbg);
+
+        // Debug kompas IST8310 onboard modul M10 (I2C Wire2, pin SDA25/SCL24)
+        char cmp_dbg[90];
+        snprintf(cmp_dbg, sizeof(cmp_dbg), "COMPASS M10: hdg=%.1f mx=%.1f my=%.1f mz=%.1f bno=%d",
+                 compass.getHeadingDeg(), compass.getMagX(), compass.getMagY(), compass.getMagZ(),
+                 (int)imu.isBNOConnected());
+        sendStatusText(MAV_SEVERITY_INFO, cmp_dbg);
     }
 
     // Attitude
