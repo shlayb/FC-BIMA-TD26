@@ -40,8 +40,6 @@ bool saveWaypointsToEEPROM() {
         return false;
     }
 
-    Serial.printf("Saving %d waypoints to EEPROM...\n", wp_sum);
-    
     // Write magic number
     EEPROM.put(WP_EEPROM::ADDR_MAGIC, WP_EEPROM::MAGIC_NUMBER);
     
@@ -58,7 +56,6 @@ bool saveWaypointsToEEPROM() {
         EEPROM.put(addr, waypoint[i]);
     }
     
-    Serial.printf("✓ Waypoints saved to EEPROM (checksum: 0x%04X)\n", checksum);
     return true;
 }
 
@@ -129,7 +126,6 @@ bool loadWaypointsFromEEPROM() {
 void clearWaypointEEPROM() {
     EEPROM.put(WP_EEPROM::ADDR_MAGIC, (uint16_t)0x0000);
     EEPROM.put(WP_EEPROM::ADDR_WP_COUNT, (uint16_t)0);
-    Serial.println("✓ EEPROM waypoint data cleared");
 }
 
 // Check if valid waypoints exist in EEPROM
