@@ -52,15 +52,15 @@
     float _spdCompFiltOmega   = 2.0f;
     float _maxClimbRate       = 4.5f;
     float _minSinkRate        = 1.0f;
-    float _maxSinkRate        = 4.12f; // Dibatasi 2.0 m/s agar tidak diving
-    float _timeConst          = 2.2f;//3.275f;
+    float _maxSinkRate        = 3.0f; // Dibatasi 3.0 m/s agar tidak diving tajam
+    float _timeConst          = 4.5f; // Naikkan time constant (standar Pixhawk 4.0-5.0s) agar level-off halus dan tidak bablas
     float _landTimeConst      = 2.0f;
-    float _ptchDamp           = 1.2f; // Damping pitch lebih tinggi untuk mencegah overshoot
+    float _ptchDamp           = 0.25f; // Sesuai standar Pixhawk (0.0 - 0.3) agar aktif meredam saat flare/level-off
     float _land_pitch_damp    = 0;
     float _landDamp           = 0.5f;
-    float _thrDamp            = 1.3f; // Tingkatkan damping throttle agar tidak melonjak mendadak
+    float _thrDamp            = 0.45f; // Turunkan (standar Pixhawk 0.5) agar throttle tidak kaget/hunting
     float _land_throttle_damp = 0;
-    float _integGain          = 0.25f; // Perhalus integrator throttle agar tidak windup/osilasi
+    float _integGain          = 0.10f; // Turunkan (standar Pixhawk 0.1) agar tidak windup berlebih
     float _integGain_takeoff  = 0;
     float _integGain_land     = 0;
     float _vertAccLim         = 7.0f;
@@ -569,22 +569,35 @@ void _update_height_demand()
     _hgt_dem = 0.5f * (_hgt_dem + _hgt_dem_in_old);
     _hgt_dem_in_old = _hgt_dem;
 
-    float max_sink_rate = _maxSinkRate; 
+    float alt_diff = _hgt_dem - _hgt_dem_prev;
+    float dist_to_target = fabsf(alt_diff);
 
-    // Limit height rate of change
-    if ((_hgt_dem - _hgt_dem_prev) > (_maxClimbRate * _DT))
+    // Smooth deceleration / flare curve: v = sqrt(2 * a * d)
+    // Sinking / climbing rate slows down smoothly as it approaches target altitude
+    const float a_decel = 0.40f; // m/s^2 smooth deceleration
+    float sink_rate_limit  = fminf(_maxSinkRate,  fmaxf(0.35f, sqrtf(2.0f * a_decel * dist_to_target)));
+    float climb_rate_limit = fminf(_maxClimbRate, fmaxf(0.35f, sqrtf(2.0f * a_decel * dist_to_target)));
+
+    // Limit height rate of change with deceleration curve
+    if (alt_diff > (climb_rate_limit * _DT))
     {
-        _hgt_dem = _hgt_dem_prev + _maxClimbRate * _DT;
+        _hgt_dem = _hgt_dem_prev + climb_rate_limit * _DT;
     }
-    else if ((_hgt_dem - _hgt_dem_prev) < (-max_sink_rate * _DT))
+    else if (alt_diff < (-sink_rate_limit * _DT))
     {
-        _hgt_dem = _hgt_dem_prev - max_sink_rate * _DT;
+        _hgt_dem = _hgt_dem_prev - sink_rate_limit * _DT;
     }
     _hgt_dem_prev = _hgt_dem;
 
-    // Apply first order lag to height demand
+    // Jika pesawat saat descent sudah mencapai target (height <= target),
+    // langsung sinkronkan state agar trajectory tidak terus meminta diving
+    if ((alt_diff < 0.0f) && (_height <= _hgt_dem + 0.5f)) {
+        _hgt_dem_prev = _hgt_dem;
+    }
+
+    // Apply first order lag to height demand (alpha = 0.10 agar tracking sigap tanpa lag berlebih)
     float hgt_dem_adj_prev = _hgt_dem_adj_last;
-    _hgt_dem_adj = 0.05f * _hgt_dem + 0.95f * _hgt_dem_adj_last;
+    _hgt_dem_adj = 0.10f * _hgt_dem + 0.90f * _hgt_dem_adj_last;
     _hgt_dem_adj_last = _hgt_dem_adj;
 
     if (_DT > 0.001f) {
@@ -592,7 +605,7 @@ void _update_height_demand()
     } else {
         _hgt_rate_dem = 0.0f;
     }
-    _hgt_rate_dem = constrain(_hgt_rate_dem, -max_sink_rate, _maxClimbRate);
+    _hgt_rate_dem = constrain(_hgt_rate_dem, -_maxSinkRate, _maxClimbRate);
 
     // DEBUG: Altitude control values every 1000ms via Serial2
     if (TECS_DEBUG && (millis() - _last_debug_ms > 1000)) {
@@ -875,12 +888,25 @@ void _update_pitch(void)
                                     ((_pitch_dem_unc < _PITCHminf) && integSEB_delta < 0.0f);
     
     // Additional anti-windup: prevent integrator windup when OVERSHOOTING target
-    // Only inhibit when altitude EXCEEDS target (prevents continuous climb after reaching altitude)
+    // Handle both CLIMB overshoot (above target) and DESCENT overshoot (below target) + Capture anticipation
     float alt_error_signed = _hgt_dem_adj - _height;  // positive = below target, negative = above target
-    if (alt_error_signed < -0.2f && integSEB_delta > 0.0f) {  // if 20cm above target and still requesting climb
+
+    // 1. Kasus Climb overshoot: pesawat sudah di atas target (>20cm), tapi masih minta nanjak
+    bool climb_overshoot   = (alt_error_signed < -0.2f && integSEB_delta > 0.0f);
+
+    // 2. Kasus Descent overshoot: pesawat sudah di bawah target (>20cm), tapi masih minta menukik
+    bool descent_overshoot = (alt_error_signed >  0.2f && integSEB_delta < 0.0f);
+
+    // 3. Proactive Altitude Capture: saat sudah dekat target (< 1.5m) dengan laju tinggi ke arah target,
+    // tahan penambahan integrator agar tidak terlambat ngerem
+    bool capture_climb   = (alt_error_signed < 0.0f && alt_error_signed > -1.5f && _climb_rate > 0.5f && integSEB_delta > 0.0f);
+    bool capture_descent = (alt_error_signed > 0.0f && alt_error_signed <  1.5f && _climb_rate < -0.5f && integSEB_delta < 0.0f);
+
+    if (climb_overshoot || descent_overshoot || capture_climb || capture_descent) {
         inhibit_integrator = true;
         if (TECS_DEBUG && (millis() - _last_debug_ms > 1000)) {
-            Serial2.println("[TECS] Windup inhibit");
+            Serial2.println(climb_overshoot ? "[TECS] Inhibit CLIMB" : 
+                           (descent_overshoot ? "[TECS] Inhibit DESCENT" : "[TECS] Inhibit CAPTURE"));
         }
     }
     

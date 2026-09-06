@@ -87,7 +87,7 @@ class FixedWingPhysics:
         self.Iyy = 0.6166            # kg*m^2 (Inersia Pitch)
         self.Ixx = 0.239            # kg*m^2 (Inersia Roll)
         self.Izz = 0.843            # kg*m^2 (Inersia Yaw)
-        self.T_max = 28.0          # N (Max thrust bersih yang tersedia untuk akselerasi & climb)
+        self.T_max = 38.0          # N (Max thrust bersih yang tersedia untuk akselerasi & climb)
                                     # Catatan: 45% cruise thr = 12.6N vs drag ~10N di 21m/s → margin tipis utk climb
 
         # Koefisien Aerodinamika — Dikalibrasi realistis untuk UAV 6kg fixed-wing

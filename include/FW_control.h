@@ -146,7 +146,7 @@ void FW_CONTROL::updateAUTO_FW(float roll, float pitch, float yaw, float gy, flo
     demanded_pitch = constrain(get_pitch_demand(), demanded_pitch_min, demanded_pitch_max);
     
     roll_cmd  = 1.3f*(constrain(nav_roll_cd()/100.0f, demanded_roll_min, demanded_roll_max));
-    pitch_cmd = 1.1f*(demanded_pitch);
+    pitch_cmd = demanded_pitch;
     u_roll = ((-fw_gain.rate_roll_P * (-roll + roll_int - (-roll_cmd + trim_roll))) + (-fw_gain.rate_roll_D * (gy)));
     u_pitch = ((fw_gain.rate_pitch_P * (-pitch + pitch_int - (-pitch_cmd + trim_pitch))) + (-fw_gain.rate_pitch_D * (gx)));
 

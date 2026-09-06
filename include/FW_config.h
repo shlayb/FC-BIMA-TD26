@@ -5,7 +5,7 @@
 //  Set to 1 to simulate via USB Python Bridge, 0 for real flight
 // ============================================================
 #ifndef HITL_ENABLED
-#define HITL_ENABLED 0
+#define HITL_ENABLED 1
 #endif
 
 // buat misi auto
@@ -45,7 +45,7 @@ inline float rtl_altitude = 60.0f; // meter
 #define MAX_THROTTLE_PWM 2012  // PWM 2000+12
 #endif
 #ifndef THR_SLEW_RATE
-#define THR_SLEW_RATE 100
+#define THR_SLEW_RATE 50
 #endif
 
 /** TECS TUNE (Non-Airspeed Mode Defaults) */
@@ -64,7 +64,7 @@ inline float min_gndspeed         = 5.0f;  // m/s (safety floor angin sakal)
 #define TECS_MIN_THROTTLE 0
 #endif
 #ifndef TECS_TIME_CONST
-#define TECS_TIME_CONST 8
+#define TECS_TIME_CONST 4.5f
 #endif
 
 /** FLY BY WIRE AIRSPEED */
