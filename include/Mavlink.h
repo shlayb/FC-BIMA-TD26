@@ -101,6 +101,8 @@ static inline bool isMissionMessage(uint32_t msgid) {
         case MAVLINK_MSG_ID_MISSION_REQUEST_LIST:
         case MAVLINK_MSG_ID_MISSION_ACK:
         case MAVLINK_MSG_ID_MISSION_CLEAR_ALL:
+        case MAVLINK_MSG_ID_MISSION_SET_CURRENT:
+        case MAVLINK_MSG_ID_MISSION_CURRENT:
             return true;
         default:
             return false;
@@ -170,6 +172,9 @@ private:
     uint16_t      expected_count      = 0;
     uint16_t      current_upload_seq  = 0;
     PortId        current_port        = PORT_USB;  // Track which port sent current message
+    PortId        mission_port        = PORT_USB;  // Dedicated port performing active mission transfer
+    uint8_t       mission_target_sys  = 255;
+    uint8_t       mission_target_comp = 0;
 
     // --------------------------------------------------------
     //  PRIVATE: Output helpers
@@ -177,7 +182,8 @@ private:
     void mavWrite(HardwareSerial& port, const mavlink_message_t& msg);
     void mavWriteUSB(Stream& port,      const mavlink_message_t& msg);
     void mavSendAll(const mavlink_message_t& msg);
-    void replyTarget(const mavlink_message_t& msg);  // Reply only to sender
+    void replyTarget(const mavlink_message_t& msg);   // Reply only to sender of current message
+    void replyMission(const mavlink_message_t& msg);  // Reply strictly to the locked mission_port
 
     // --------------------------------------------------------
     //  PRIVATE: Telemetry senders
@@ -205,6 +211,8 @@ private:
     void sendServoOutputRaw();
     void sendRcChannelsRaw();
     void sendMissionCountToRPI();  // Kirim total WP ke RPI secara berkala
+    void sendHomePosition();
+    void sendAutopilotVersion();
 
     uint8_t  getBaseMode()   const;
     uint32_t getCustomMode() const;
@@ -221,6 +229,7 @@ private:
     void handleMissionItemInt(const mavlink_message_t& msg);
     void handleMissionItem(const mavlink_message_t& msg);
     void handleMissionClearAll(const mavlink_message_t& msg);
+    void handleMissionSetCurrent(const mavlink_message_t& msg);
     void handleSetPositionTargetLocalNed(const mavlink_message_t& msg);
     void handleSetPositionTargetGlobalInt(const mavlink_message_t& msg);
     void processAsFC(const mavlink_message_t& msg, PortId from);
@@ -303,6 +312,13 @@ void MavlinkHandler::replyTarget(const mavlink_message_t& msg) {
     if (current_port == PORT_USB) mavWriteUSB(Serial, msg);
     else if (current_port == PORT_TLM) mavWrite(Serial2, msg);
     else if (current_port == PORT_RPI) mavWrite(Serial1, msg);
+}
+
+void MavlinkHandler::replyMission(const mavlink_message_t& msg) {
+    // Send khusus ke port yang mengunci transaksi misi (tidak terpengaruh port lain)
+    if (mission_port == PORT_USB) mavWriteUSB(Serial, msg);
+    else if (mission_port == PORT_TLM) mavWrite(Serial2, msg);
+    else if (mission_port == PORT_RPI) mavWrite(Serial1, msg);
 }
 
 // ============================================================
@@ -496,6 +512,7 @@ void MavlinkHandler::processAsFC(const mavlink_message_t& msg, PortId from) {
         case MAVLINK_MSG_ID_MISSION_ITEM_INT:      handleMissionItemInt(msg);      break;
         case MAVLINK_MSG_ID_MISSION_ITEM:          handleMissionItem(msg);         break;
         case MAVLINK_MSG_ID_MISSION_CLEAR_ALL:     handleMissionClearAll(msg);     break;
+        case MAVLINK_MSG_ID_MISSION_SET_CURRENT:   handleMissionSetCurrent(msg);   break;
         case MAVLINK_MSG_ID_PARAM_REQUEST_LIST: handleParamRequestList(msg); break;
         case MAVLINK_MSG_ID_PARAM_REQUEST_READ: handleParamRequestRead(msg); break;
         case MAVLINK_MSG_ID_PARAM_SET:          handleParamSet(msg);         break;
@@ -517,6 +534,7 @@ void MavlinkHandler::forwardToOthers(const mavlink_message_t& msg, PortId from) 
         case MAVLINK_MSG_ID_MISSION_REQUEST_LIST:
         case MAVLINK_MSG_ID_MISSION_ACK:
         case MAVLINK_MSG_ID_MISSION_CLEAR_ALL:
+        case MAVLINK_MSG_ID_MISSION_SET_CURRENT:
         case MAVLINK_MSG_ID_PARAM_REQUEST_LIST:
         case MAVLINK_MSG_ID_PARAM_REQUEST_READ:
         case MAVLINK_MSG_ID_PARAM_SET:
@@ -711,6 +729,26 @@ void MavlinkHandler::handleCommandLong(const mavlink_message_t& msg) {
             break;
         }
 
+        case MAV_CMD_GET_HOME_POSITION: {
+            sendHomePosition();
+            result = MAV_RESULT_ACCEPTED;
+            break;
+        }
+
+        case MAV_CMD_REQUEST_MESSAGE: {
+            uint16_t req_msg_id = (uint16_t)(cmd.param1 + 0.5f);
+            if (req_msg_id == MAVLINK_MSG_ID_HOME_POSITION) {
+                sendHomePosition();
+                result = MAV_RESULT_ACCEPTED;
+            } else if (req_msg_id == MAVLINK_MSG_ID_AUTOPILOT_VERSION) {
+                sendAutopilotVersion();
+                result = MAV_RESULT_ACCEPTED;
+            } else {
+                result = MAV_RESULT_UNSUPPORTED;
+            }
+            break;
+        }
+
         default: result = MAV_RESULT_UNSUPPORTED; break;
     }
 
@@ -748,15 +786,6 @@ void MavlinkHandler::handleMissionRequest(const mavlink_message_t& msg) {
         MAV_MISSION_TYPE_MISSION);
     replyTarget(reply);  // Hanya ke sender
     Serial.printf("Sent mission item %d\n", request.seq);
-
-    if (request.seq == wp_sum - 1) {
-        mavlink_message_t ack;
-        mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
-                                     msg.sysid, msg.compid,
-                                     MAV_MISSION_ACCEPTED,
-                                     MAV_MISSION_TYPE_MISSION);
-        replyTarget(ack);  // Hanya ke sender
-    }
 }
 
 void MavlinkHandler::handleMissionRequestInt(const mavlink_message_t& msg) {
@@ -777,15 +806,6 @@ void MavlinkHandler::handleMissionRequestInt(const mavlink_message_t& msg) {
         MAV_MISSION_TYPE_MISSION);
     replyTarget(reply);  // Hanya ke sender
     Serial.printf("Sent mission item int %d\n", request.seq);
-
-    if (request.seq == wp_sum - 1) {
-        mavlink_message_t ack;
-        mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
-                                     msg.sysid, msg.compid,
-                                     MAV_MISSION_ACCEPTED,
-                                     MAV_MISSION_TYPE_MISSION);
-        replyTarget(ack);  // Hanya ke sender
-    }
 }
 
 void MavlinkHandler::handleMissionCount(const mavlink_message_t& msg) {
@@ -793,11 +813,9 @@ void MavlinkHandler::handleMissionCount(const mavlink_message_t& msg) {
     mavlink_msg_mission_count_decode(&msg, &count_msg);
     expected_count = count_msg.count;
     lastMissionActivity = getMillis();
-    
-    // DEBUG: Mission count received
-    char debug_count[100];
-    snprintf(debug_count, sizeof(debug_count), "DEBUG WP: MISSION_COUNT received, expecting %d WP", expected_count);
-    sendStatusText(MAV_SEVERITY_INFO, debug_count);
+    mission_port = current_port;
+    mission_target_sys = msg.sysid;
+    mission_target_comp = msg.compid;
 
     if (expected_count == 0) {
         wp_sum = 0;
@@ -808,11 +826,10 @@ void MavlinkHandler::handleMissionCount(const mavlink_message_t& msg) {
 
         mavlink_message_t ack;
         mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
-                                     msg.sysid, msg.compid,
+                                     mission_target_sys, mission_target_comp,
                                      MAV_MISSION_ACCEPTED,
-                                     count_msg.mission_type);
-        mavSendAll(ack);
-        replyTarget(ack);
+                                     MAV_MISSION_TYPE_MISSION);
+        replyMission(ack);
         sendStatusText(MAV_SEVERITY_INFO, "Mission cleared (0 count)");
         return;
     }
@@ -820,11 +837,10 @@ void MavlinkHandler::handleMissionCount(const mavlink_message_t& msg) {
     if (expected_count > MAX_MISSION) {
         mavlink_message_t ack;
         mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
-                                     msg.sysid, msg.compid,
+                                     mission_target_sys, mission_target_comp,
                                      MAV_MISSION_NO_SPACE,
-                                     count_msg.mission_type);
-        mavSendAll(ack);
-        replyTarget(ack);
+                                     MAV_MISSION_TYPE_MISSION);
+        replyMission(ack);
         sendStatusText(MAV_SEVERITY_WARNING, "Mission count too large");
         mission_state = MISSION_IDLE;
         return;
@@ -833,27 +849,16 @@ void MavlinkHandler::handleMissionCount(const mavlink_message_t& msg) {
     mission_state       = MISSION_RECEIVING;
     current_upload_seq  = 0;
 
-    // Kirim request item 0: INT dan legacy agar kompatibel dengan SEMUA GCS & script
-    mavlink_message_t req_int, req_legacy;
+    // Kirim request item 0 tunggal (INT) khusus ke mission_port
+    mavlink_message_t req_int;
     mavlink_msg_mission_request_int_pack(SYSTEM_ID, COMPONENT_ID, &req_int,
-                                         msg.sysid, msg.compid, 0,
-                                         count_msg.mission_type);
-    mavlink_msg_mission_request_pack(SYSTEM_ID, COMPONENT_ID, &req_legacy,
-                                     msg.sysid, msg.compid, 0,
-                                     count_msg.mission_type);
-    mavSendAll(req_int);
-    replyTarget(req_int);
-    mavSendAll(req_legacy);
-    replyTarget(req_legacy);
-    
-    sendStatusText(MAV_SEVERITY_INFO, "DEBUG WP: Requesting seq=0");
+                                         mission_target_sys, mission_target_comp, 0,
+                                         MAV_MISSION_TYPE_MISSION);
+    replyMission(req_int);
 }
 
 void MavlinkHandler::handleMissionItemInt(const mavlink_message_t& msg) {
     if (mission_state != MISSION_RECEIVING) {
-        char debug_state[80];
-        snprintf(debug_state, sizeof(debug_state), "DEBUG WP: MISSION_ITEM_INT ignored, mission_state=%d", mission_state);
-        sendStatusText(MAV_SEVERITY_WARNING, debug_state);
         return;
     }
 
@@ -861,19 +866,24 @@ void MavlinkHandler::handleMissionItemInt(const mavlink_message_t& msg) {
     mavlink_msg_mission_item_int_decode(&msg, &item);
     lastMissionActivity = getMillis();
 
-    // DEBUG: Item received
-    char debug_item[100];
-    snprintf(debug_item, sizeof(debug_item), "DEBUG WP: Received seq=%d (expected seq=%d)", item.seq, current_upload_seq);
-    sendStatusText(MAV_SEVERITY_INFO, debug_item);
+    // Toleransi retransmisi / duplikat dari client: jika client kirim ulang item yang baru diproses
+    if (item.seq + 1 == current_upload_seq) {
+        mavlink_message_t req_int;
+        mavlink_msg_mission_request_int_pack(SYSTEM_ID, COMPONENT_ID, &req_int,
+                                             mission_target_sys, mission_target_comp,
+                                             current_upload_seq,
+                                             MAV_MISSION_TYPE_MISSION);
+        replyMission(req_int);
+        return;
+    }
 
     if (item.seq != current_upload_seq) {
         mavlink_message_t ack;
         mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
-                                     msg.sysid, msg.compid,
+                                     mission_target_sys, mission_target_comp,
                                      MAV_MISSION_INVALID_SEQUENCE,
-                                     item.mission_type);
-        mavSendAll(ack);
-        replyTarget(ack);
+                                     MAV_MISSION_TYPE_MISSION);
+        replyMission(ack);
         mission_state = MISSION_IDLE;
         sendStatusText(MAV_SEVERITY_WARNING, "Invalid mission sequence");
         return;
@@ -886,40 +896,24 @@ void MavlinkHandler::handleMissionItemInt(const mavlink_message_t& msg) {
     current_upload_seq++;
 
     if (current_upload_seq < expected_count) {
-        mavlink_message_t req_int, req_legacy;
+        mavlink_message_t req_int;
         mavlink_msg_mission_request_int_pack(SYSTEM_ID, COMPONENT_ID, &req_int,
-                                             msg.sysid, msg.compid,
+                                             mission_target_sys, mission_target_comp,
                                              current_upload_seq,
-                                             item.mission_type);
-        mavlink_msg_mission_request_pack(SYSTEM_ID, COMPONENT_ID, &req_legacy,
-                                         msg.sysid, msg.compid,
-                                         current_upload_seq,
-                                         item.mission_type);
-        mavSendAll(req_int);
-        replyTarget(req_int);
-        mavSendAll(req_legacy);
-        replyTarget(req_legacy);
-        
-        // DEBUG: Next item requested
-        char debug_req[80];
-        snprintf(debug_req, sizeof(debug_req), "DEBUG WP: Requesting seq=%d", current_upload_seq);
-        sendStatusText(MAV_SEVERITY_INFO, debug_req);
+                                             MAV_MISSION_TYPE_MISSION);
+        replyMission(req_int);
     } else {
         wp_sum = expected_count;
-        char debug_msg[80];
-        snprintf(debug_msg, sizeof(debug_msg), "DEBUG WP: All %d items received, sending ACK", wp_sum);
-        sendStatusText(MAV_SEVERITY_INFO, debug_msg);
-        
         mavlink_message_t ack;
         mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
-                                     msg.sysid, msg.compid,
+                                     mission_target_sys, mission_target_comp,
                                      MAV_MISSION_ACCEPTED,
-                                     item.mission_type);
-        mavSendAll(ack);
-        replyTarget(ack);
+                                     MAV_MISSION_TYPE_MISSION);
+        replyMission(ack);
         mission_state = MISSION_IDLE;
         sendStatusText(MAV_SEVERITY_INFO, "Mission upload complete");
         saveWaypointsToEEPROM();
+        sendHomePosition();
     }
 }
 
@@ -930,14 +924,24 @@ void MavlinkHandler::handleMissionItem(const mavlink_message_t& msg) {
     mavlink_msg_mission_item_decode(&msg, &item);
     lastMissionActivity = getMillis();
 
+    // Toleransi retransmisi / duplikat dari client (legacy)
+    if (item.seq + 1 == current_upload_seq) {
+        mavlink_message_t req;
+        mavlink_msg_mission_request_pack(SYSTEM_ID, COMPONENT_ID, &req,
+                                         mission_target_sys, mission_target_comp,
+                                         current_upload_seq,
+                                         MAV_MISSION_TYPE_MISSION);
+        replyMission(req);
+        return;
+    }
+
     if (item.seq != current_upload_seq) {
         mavlink_message_t ack;
         mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
-                                     msg.sysid, msg.compid,
+                                     mission_target_sys, mission_target_comp,
                                      MAV_MISSION_INVALID_SEQUENCE,
-                                     item.mission_type);
-        mavSendAll(ack);
-        replyTarget(ack);
+                                     MAV_MISSION_TYPE_MISSION);
+        replyMission(ack);
         mission_state = MISSION_IDLE;
         sendStatusText(MAV_SEVERITY_WARNING, "Invalid mission sequence");
         return;
@@ -949,35 +953,24 @@ void MavlinkHandler::handleMissionItem(const mavlink_message_t& msg) {
     current_upload_seq++;
 
     if (current_upload_seq < expected_count) {
-        mavlink_message_t req_int, req_legacy;
-        mavlink_msg_mission_request_int_pack(SYSTEM_ID, COMPONENT_ID, &req_int,
-                                             msg.sysid, msg.compid,
-                                             current_upload_seq,
-                                             item.mission_type);
-        mavlink_msg_mission_request_pack(SYSTEM_ID, COMPONENT_ID, &req_legacy,
-                                         msg.sysid, msg.compid,
+        mavlink_message_t req;
+        mavlink_msg_mission_request_pack(SYSTEM_ID, COMPONENT_ID, &req,
+                                         mission_target_sys, mission_target_comp,
                                          current_upload_seq,
-                                         item.mission_type);
-        mavSendAll(req_int);
-        replyTarget(req_int);
-        mavSendAll(req_legacy);
-        replyTarget(req_legacy);
+                                         MAV_MISSION_TYPE_MISSION);
+        replyMission(req);
     } else {
         wp_sum = expected_count;
-        char debug_msg[80];
-        snprintf(debug_msg, sizeof(debug_msg), "Mission (legacy) uploaded: %d WP", wp_sum);
-        sendStatusText(MAV_SEVERITY_INFO, debug_msg);
-        
         mavlink_message_t ack;
         mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
-                                     msg.sysid, msg.compid,
+                                     mission_target_sys, mission_target_comp,
                                      MAV_MISSION_ACCEPTED,
-                                     item.mission_type);
-        mavSendAll(ack);
-        replyTarget(ack);
+                                     MAV_MISSION_TYPE_MISSION);
+        replyMission(ack);
         mission_state = MISSION_IDLE;
         sendStatusText(MAV_SEVERITY_INFO, "Mission upload complete");
         saveWaypointsToEEPROM();
+        sendHomePosition();
     }
 }
 
@@ -991,18 +984,25 @@ void MavlinkHandler::handleMissionClearAll(const mavlink_message_t& msg) {
     flag_takeoff = -1;
     mission_state = MISSION_IDLE;
     lastMissionActivity = getMillis();
-    
-    // DEBUG: Mission clear received and ACK sent
-    sendStatusText(MAV_SEVERITY_INFO, "DEBUG WP: MISSION_CLEAR received, sending ACK");
 
     mavlink_message_t ack;
     mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
                                  msg.sysid, msg.compid,
                                  MAV_MISSION_ACCEPTED,
-                                 clear_all.mission_type);
-    mavSendAll(ack);
+                                 MAV_MISSION_TYPE_MISSION);
     replyTarget(ack);
     sendStatusText(MAV_SEVERITY_INFO, "Missions cleared");
+}
+
+void MavlinkHandler::handleMissionSetCurrent(const mavlink_message_t& msg) {
+    mavlink_mission_set_current_t set_cur;
+    mavlink_msg_mission_set_current_decode(&msg, &set_cur);
+    if (set_cur.seq < wp_sum) {
+        flag_wp = set_cur.seq;
+    }
+    mavlink_message_t reply;
+    mavlink_msg_mission_current_pack(SYSTEM_ID, COMPONENT_ID, &reply, flag_wp);
+    replyTarget(reply);
 }
 
 void MavlinkHandler::handleSetPositionTargetLocalNed(const mavlink_message_t& msg) {
@@ -1257,6 +1257,59 @@ void MavlinkHandler::sendGlobalPositionInt() {
     mavSendAll(msg);
 }
 
+void MavlinkHandler::sendHomePosition() {
+    int32_t home_lat = 0;
+    int32_t home_lon = 0;
+    int32_t home_alt = 0; // mm MSL
+
+    // Prioritas 1: waypoint[0] jika ada
+    if (waypoint[0].lat != 0 || waypoint[0].lng != 0) {
+        home_lat = waypoint[0].lat;
+        home_lon = waypoint[0].lng;
+        home_alt = waypoint[0].alt * 10; // cm to mm
+    } 
+    // Prioritas 2: GPS fix jika ada
+    else if (gepees.getStatus() >= 2) {
+        home_lat = (int32_t)(gepees.latitude * 1e7);
+        home_lon = (int32_t)(gepees.longitude * 1e7);
+        home_alt = (int32_t)(baro.altitude * 1000.0f);
+    }
+
+    if (home_lat == 0 && home_lon == 0) {
+        return; // Belum ada data koordinat valid
+    }
+
+    float q[4] = {1.0f, 0.0f, 0.0f, 0.0f};
+    mavlink_message_t msg;
+    mavlink_msg_home_position_pack(
+        SYSTEM_ID, COMPONENT_ID, &msg,
+        home_lat, home_lon, home_alt,
+        0.0f, 0.0f, 0.0f,
+        q,
+        0.0f, 0.0f, 0.0f,
+        0
+    );
+    mavSendAll(msg);
+}
+
+void MavlinkHandler::sendAutopilotVersion() {
+    mavlink_message_t msg;
+    uint8_t custom_ver[8] = {0};
+    mavlink_msg_autopilot_version_pack(
+        SYSTEM_ID, COMPONENT_ID, &msg,
+        MAV_PROTOCOL_CAPABILITY_MISSION_INT | MAV_PROTOCOL_CAPABILITY_COMMAND_INT | MAV_PROTOCOL_CAPABILITY_PARAM_FLOAT,
+        3,  // flight_sw_version
+        0,  // middleware_sw_version
+        0,  // os_sw_version
+        0,  // board_version
+        custom_ver,
+        custom_ver,
+        custom_ver,
+        0, 0, 0, custom_ver
+    );
+    mavSendAll(msg);
+}
+
 void MavlinkHandler::sendServoOutputRaw() {
     mavlink_message_t msg;
     mavlink_msg_servo_output_raw_pack(
@@ -1409,11 +1462,19 @@ void MavlinkHandler::mavlinkTask() {
         sendRcChannelsRaw();
     }
 
-    // Kirim total WP count ke RPI setiap 1 detik (HANYA saat tidak sedang upload mission)
-    if (mission_state == MISSION_IDLE && (now - lastWpCount >= 1000)) {
-        lastWpCount = now;
-        sendMissionCountToRPI();
+    // Home Position (1 Hz untuk sinkronisasi koordinat Home di GCS)
+    static uint32_t lastHomePos = 0;
+    if (now - lastHomePos >= 1000) {
+        lastHomePos = now;
+        sendHomePosition();
     }
+
+    // Penyiaran berkala MISSION_COUNT dinonaktifkan agar tidak mengganggu inisiasi transaksi misi MAVLink
+    // (GCS atau RPi dapat meminta count via MISSION_REQUEST_LIST secara standar)
+    // if (mission_state == MISSION_IDLE && (now - lastWpCount >= 1000)) {
+    //     lastWpCount = now;
+    //     sendMissionCountToRPI();
+    // }
 
     // Safety timeout untuk transaksi upload/download mission (> 5 detik tanpa aktivitas)
     if (mission_state != MISSION_IDLE && (now - lastMissionActivity >= 5000)) {
