@@ -26,16 +26,16 @@
 // 13 DAN 33 TERBALIK
 // 36 DAN 37 TERBALIK
 float SERVO_RUD_L   = 2;   // pin 2  - MTR 1  (CH_MTR_1)
-float MOTOR_1_PIN   = 3;   // pin 3  - MTR 7  (Tidak dipakai)
-float SERVO_ELE     = 37;  // pin 37 - MTR 2  (CH_MTR_2)
-float MOTOR_2_PIN   = 5;   // pin 5  - MTR 8  (Tidak dipakai) - FC pin DICEK LAGI
-float SERVO_AIL_L   = 6;   // pin 6  - MTR 3  (CH_MTR_3)
-float MOTOR_3_PIN   = 9;   // pin 9  - MTR 9  (Tidak dipakai)
-float THROTTLE      = 10;  // pin 10 - MTR 4  (CH_MTR_4)
-float MOTOR_4_PIN   = 11;  // pin 11 - MTR 10 (Tidak dipakai)
 float SERVO_RUD_R   = 13;  // pin 13 - MTR 11 (CH_MTR_11)
+float SERVO_ELE     = 37;  // pin 37 - MTR 2  (CH_MTR_2)
+float SERVO_AIL_L   = 6;   // pin 6  - MTR 3  (CH_MTR_3)
 float SERVO_AIL_R   = 33;  // pin 33 - MTR 5  (CH_MTR_5)
+float THROTTLE      = 10;  // pin 10 - MTR 4  (CH_MTR_4)
 float SERVO_PAYLOAD = 36;  // pin 36 - MTR 6  (CH_MTR_6)
+float MOTOR_1_PIN   = 3;   // pin 3  - MTR 7  (Tidak dipakai)
+float MOTOR_2_PIN   = 5;   // pin 5  - MTR 8  (Tidak dipakai) - FC pin DICEK LAGI
+float MOTOR_3_PIN   = 9;   // pin 9  - MTR 9  (Tidak dipakai)
+float MOTOR_4_PIN   = 11;  // pin 11 - MTR 10 (Tidak dipakai)
 
 // #define MTR_1_PIN 9  // MTR 9 (Throttle Kanan)
 // #define MTR_2_PIN 2  // MTR 1  (Throttle Kiri) - Changed from pin 6 to pin 2 (PWM capable, no conflicts)

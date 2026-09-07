@@ -21,7 +21,7 @@ void exit_auto(){
     enterauto = false;
     auto_throttle_mode = false;
     auto_navigation_mode = false;
-    launch_guard.on_exit_auto();
+    // launch_guard.on_exit_auto();
     // Serial2.print("flag_wp tersimpan: "); Serial2.println(flag_wp);
 }
 
@@ -29,7 +29,7 @@ void init_auto(){
     auto_throttle_mode = true;
     auto_navigation_mode = true;
     auto_loiter_mode = false;
-    launch_guard.on_enter_auto();
+    // launch_guard.on_enter_auto();
     
     // Cek apakah ini first entry atau resume
     if (flag_wp <= 0) {
@@ -148,48 +148,48 @@ protected:
     nav_gps();
     
     // Cek jika seluruh waypoint misi telah selesai -> transisi ke RTL
-    if (flag_wp >= wp_sum && wp_sum > 0) {
-        mode_now = 5;
-        modes.setMode(ModeId::RTL);
-        active_mode = ModeId::RTL;
-        current = ModeId::RTL;
-        return;
-    }
+    // if (flag_wp >= wp_sum && wp_sum > 0) {
+    //     mode_now = 5;
+    //     modes.setMode(ModeId::RTL);
+    //     active_mode = ModeId::RTL;
+    //     current = ModeId::RTL;
+    //     return;
+    // }
 
     mode_fbwa_plane = true;
     navigate();
-    if (active_mode != ModeId::AUTO || current != ModeId::AUTO || mode_now == 5 || (flag_wp >= wp_sum && wp_sum > 0)) {
-        return;
-    }
+    // if (active_mode != ModeId::AUTO || current != ModeId::AUTO || mode_now == 5 || (flag_wp >= wp_sum && wp_sum > 0)) {
+    //     return;
+    // }
     update_speed_height();
     update_alt();
     updateAuto_FW();
     
-    // Launch Guard: Di darat motor dijamin OFF (988), aktif setelah dilempar / di-shake
-    float safe_pitch_dem = nav_pitch_deg;
-    float safe_roll_dem  = nav_roll_deg;
-    float safe_thr_pwm   = 988.0f;
+    // Launch Guard: Di darat motor dijamin OFF (988), aktif setelah dilempar / di-shake (sementara di-comment)
+    // float safe_pitch_dem = nav_pitch_deg;
+    // float safe_roll_dem  = nav_roll_deg;
+    // float safe_thr_pwm   = 988.0f;
 
-    launch_guard.update(safe_pitch_dem, safe_roll_dem, safe_thr_pwm);
+    // launch_guard.update(safe_pitch_dem, safe_roll_dem, safe_thr_pwm);
 
-    if (!launch_guard.is_launch_complete()) {
-        nav_pitch_deg = safe_pitch_dem;
-        nav_roll_deg  = safe_roll_dem;
-    }
+    // if (!launch_guard.is_launch_complete()) {
+    //     nav_pitch_deg = safe_pitch_dem;
+    //     nav_roll_deg  = safe_roll_dem;
+    // }
 
     // Cascaded AUTO controller derived from FBWA inner loop + L1 + TECS
     fw_control.updateAUTO_FW(imu.roll, imu.pitch, imu.yaw,
                              imu.gyro_y, imu.gyro_x, imu.gyro_z);
-    fw_servos_out_fbwa();
-    plane_motors_out_auto(safe_thr_pwm);
     payload_control_unified();  // Unified payload control (manual + auto)
+    fw_servos_out_fbwa();
+    plane_motors_out(); // Throttle langsung dari pilot (ch_throttle)
 
 #if !HITL_ENABLED
     Serial.print("demanded_pitch:"); Serial.print(get_pitch_demand());
     Serial.print(" |nav_pitch_deg:"); Serial.print(nav_pitch_deg);
     Serial.print(" |demanded_roll:"); Serial.print(nav_roll_cd()/100.0f);
     Serial.print(" |nav_roll_deg:"); Serial.print(nav_roll_deg);
-    Serial.print(" |auto_thr:"); Serial.println(fw_control.get_auto_throttle());
+    Serial.print(" |pilot_thr:"); Serial.println(ch_throttle);
 #endif
     if (active_mode == ModeId::AUTO && current == ModeId::AUTO) {
         mode_phase = 3;
