@@ -11,8 +11,10 @@
 #include "Fuzzy_FW_Roll.h"
 // #include "Radio.h"
 
-// Forward declaration for waypoint notification
+// Forward declaration for waypoint & telemetry notification
 void notifyWaypointReached(uint16_t seq);
+void send_statustext_info(const char* text);
+void send_immediate_heartbeat();
 
 bool enable_throttle_nudge = true;
 int16_t throttle_nudge;
@@ -95,45 +97,54 @@ void set_next_WP(struct Locations &loc)
     setup_turn_angle();
 }
 
-// update altitude
-void update_alt()
-{
+// =========================================================================
+//  TECS Guidance & Energy Controller (ArduPilot AP_TECS standard execution)
+//  Menghitung demanded pitch & demanded throttle berdasarkan target alt & aspd
+// =========================================================================
+void update_tecs() {
+    // 1. Update filter komplementer 50Hz (kecepatan & estimasi ketinggian)
+    update_50hz();
 
-    if (enable_throttle_nudge)
-    {
-        throttle_nudge = 0.5 * scaleToPercent(ch_throttle);
-    }
-    else
-    {
+    // 2. Hitung throttle nudge jika pilot mendorong stik melebihi cruise throttle
+    if (enable_throttle_nudge) {
+        float thr_pct = scaleToPercent(ch_throttle);
+        if (thr_pct > tecs_cruise_throttle) {
+            throttle_nudge = thr_pct - tecs_cruise_throttle;
+        } else {
+            throttle_nudge = 0.0f;
+        }
+    } else {
         throttle_nudge = 0.0f;
     }
 
-    //calculate sink rate (UNUSED)
-    // float sink_rate = -get_climb_rate();
-    if (auto_throttle_mode)
-    {
-        update_pitch_throttle(target_altitude.amsl_cm,
-                                                  target_airspeed,
-                                                  throttle_nudge,
-                                                  tecs_hgt_afe(),
-                                                  aerodynamic_load_factor);
-    }
+    // 3. Eksekusi kontrol energi total TECS
+    update_pitch_throttle(target_altitude.amsl_cm,
+                          target_airspeed,
+                          throttle_nudge,
+                          tecs_hgt_afe(),
+                          aerodynamic_load_factor);
+
+    // 4. Update variabel setpoint navigasi attitude (roll & pitch telemetry)
+    calc_nav_roll();
+    calc_nav_pitch();
 }
 
-int autonav_state = 0;  /// variable to check auto-loop state, delete after testing
-bool enterauto = false;
+// Backward-compatibility shims:
+void update_alt() {
+    update_tecs();
+}
 
 void update_speed_height() {
-    if (auto_throttle_mode) {
-        update_50hz();
-    }
+    update_50hz();
 }
 
 void updateAuto_FW() {
     calc_nav_roll();
     calc_nav_pitch();
-    // calc_throttle();
 }
+
+int autonav_state = 0;  /// variable to check auto-loop state, delete after testing
+bool enterauto = false;
 
 int display_wp() {
     if (flag_wp == -1) {
@@ -202,9 +213,14 @@ void navigate() {
     set_path_proportion(auto_state.wp_proportion);
 
     if (auto_navigation_mode) {
-        const float wp_radius = WP_RADIUS_DEFAULT;
-        float td = turn_distance(wp_radius, auto_state.next_turn_angle);
-        acceptance_distance_m = MAX(25.0f, td);
+        // Radius penerimaan: prioritaskan per-waypoint radius jika ada (dari MAVLink param2),
+        // jika 0 gunakan parameter global wp_radius yang disetel dari Mission Planner
+        float effective_wp_rad = wp_radius;
+        if (flag_wp >= 0 && flag_wp < wp_sum && waypoint_radius[flag_wp] > 0.0f) {
+            effective_wp_rad = waypoint_radius[flag_wp];
+        }
+        float td = turn_distance(effective_wp_rad, auto_state.next_turn_angle);
+        acceptance_distance_m = MAX(15.0f, td);
     }
 
     if (auto_takeoff_mode) {
@@ -227,15 +243,33 @@ void navigate() {
             notifyWaypointReached(flag_wp);
             
             if (is_last_wp) {
-                // Semua Waypoint telah selesai -> Masuk Mode RTL (Return to Launch)
+                // Semua Waypoint telah selesai -> Tentukan perilaku berdasarkan MIS_DONE_BEHAVE
                 // Matikan navigasi auto DULU agar navigate() tidak jalan lagi saat mode sedang transisi
                 auto_navigation_mode = false;
                 flag_wp = wp_sum;
-                mode_now = 5;
-                // Langsung set mode RTL via manager agar responsif.
-                modes.setMode(ModeId::RTL);
-                active_mode = ModeId::RTL;
-                current = ModeId::RTL;
+
+                int behave = (int)(mis_done_behave + 0.5f);
+                if (behave == 0) {
+                    // === LOITER DI WAYPOINT TERAKHIR (ArduPilot standard MIS_DONE_BEHAVE=0) ===
+                    uint16_t last_idx = (wp_sum > 1) ? (wp_sum - 1) : 1;
+                    loiter_set_target(waypoint[last_idx], waypoint[last_idx].alt);
+                    mode_now = 6;
+                    modes.setMode(ModeId::LOITER);
+                    active_mode = ModeId::LOITER;
+                    current = ModeId::LOITER;
+                    send_statustext_info("Mission complete: LOITER");
+                    Serial.println("[MISSION] All WPs completed -> Entering LOITER at last WP");
+                } else {
+                    // === RTL KE HOME (ArduPilot standard MIS_DONE_BEHAVE=1) ===
+                    mode_now = 5;
+                    modes.setMode(ModeId::RTL);
+                    active_mode = ModeId::RTL;
+                    current = ModeId::RTL;
+                    send_statustext_info("Mission complete: RTL");
+                    Serial.println("[MISSION] All WPs completed -> Entering RTL to HOME");
+                }
+
+                send_immediate_heartbeat();
                 return;
             } else {
                 // Lanjut ke waypoint berikutnya

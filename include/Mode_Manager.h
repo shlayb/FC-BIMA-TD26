@@ -19,7 +19,6 @@ extern float model_uav;
 void setup_mode() {
     ahrs.update_ahrs();
     nav_gps();
-    modes.update();
 
     int model = (int)(model_uav + 0.5f);
 
@@ -71,6 +70,7 @@ void setup_mode() {
             }
         }
 
+        modes.update();
         return;
     }
 
@@ -148,6 +148,7 @@ void setup_mode() {
             }
         }
 
+        modes.update();
         return;
     }
 
@@ -161,6 +162,7 @@ void setup_mode() {
             current = ModeId::MANU;
         }
 
+        modes.update();
         return;
     }
 
