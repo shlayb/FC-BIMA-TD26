@@ -5,6 +5,10 @@
 #include "Radio.h"
 #include "AHRS.h"
 
+extern bool auto_throttle_mode;
+extern float nav_roll_deg;
+extern float nav_pitch_deg;
+
 struct FW_gain
 {
         // Rate PID + Imax
@@ -48,11 +52,9 @@ class FW_CONTROL {
     void updateAUTO_FW(float roll, float pitch, float yaw,
                         float gy, float gx, float gz);
     FW_gain fw_gain;
-    int servos[4];
-    int auto_throttle;
+    int servos[4] = {0, 0, 0, 0};
+    int auto_throttle = 0;
     int get_auto_throttle();
-    float auto_throttle_min = 1500.0f;
-    float auto_throttle_max = 1900.0f;
 
   private:
   void getIntegral(int16_t ch_thr, float roll, float pitch, float yaw);
@@ -143,21 +145,22 @@ void FW_CONTROL::getIntegral(int16_t ch_thr, float roll, float pitch, float yaw)
     pitch_int += fw_gain.rate_pitch_I * pitch * tdelta;
     roll_int = constrain(roll_int, -15, 15);
     pitch_int = constrain(pitch_int, -15, 15);
-    // Reset the integrators
-    if (ch_thr < 1100) {
+    // Reset integrators on ground: when disarmed, or (in manual/FBWA) when pilot throttle is zero (< 1100)
+    if (!arming || (!auto_throttle_mode && ch_thr < 1100)) {
         roll_int = 0.0f;
         pitch_int = 0.0f;
-}
+    }
 }
 
 void FW_CONTROL::updateAUTO_FW(float roll, float pitch, float yaw, float gy, float gx, float gz) {
-    int ch_thr = ch_throttle;
-    getIntegral(ch_thr, roll, pitch, yaw);
-    demanded_pitch = constrain(get_pitch_demand(), demanded_pitch_min, demanded_pitch_max);
-    // demanded_pitch = demanded_pitch < -35 ? 0 : demanded_pitch;
+    int auto_thr = get_auto_throttle();
+    getIntegral(auto_thr, roll, pitch, yaw);
 
-    roll_cmd  = -1.0f*(constrain((nav_roll_cd())/100.0f, demanded_roll_min, demanded_roll_max));
-    pitch_cmd = 1.0f*(demanded_pitch);
+    // Gunakan Single Source of Truth dari Navigation / TECS (sudah dihitung di update_tecs)
+    demanded_pitch = nav_pitch_deg;
+    pitch_cmd      = demanded_pitch;
+    roll_cmd       = -1.0f * nav_roll_deg;
+
     u_roll = ((-fw_gain.rate_roll_P * (-roll + roll_int - (roll_cmd + trim_roll))) + (-fw_gain.rate_roll_D * (gy)));
     u_pitch = ((fw_gain.rate_pitch_P * (-pitch + pitch_int - (-pitch_cmd + trim_pitch))) + (-fw_gain.rate_pitch_D * (gx)));
 
@@ -174,8 +177,8 @@ void FW_CONTROL::updateAUTO_FW(float roll, float pitch, float yaw, float gy, flo
 
 int FW_CONTROL::get_auto_throttle() {
     int32_t tecs_thr = constrain(get_throttle_demand(), 0, 100);
-    auto_throttle = map(tecs_thr, 0, 100, 988, 2012);
-    auto_throttle = constrain(auto_throttle, (int)auto_throttle_min, (int)auto_throttle_max);
+    auto_throttle = map(tecs_thr, 0, 100, MIN_THROTTLE_PWM, MAX_THROTTLE_PWM);
+    auto_throttle = constrain(auto_throttle, MIN_THROTTLE_PWM, MAX_THROTTLE_PWM);
     return auto_throttle;
 }
 
