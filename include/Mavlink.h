@@ -48,6 +48,8 @@
 extern Locations waypoint[100];
 extern int       wp_sum;
 extern Airspeed  arspd;
+void init_auto();
+void set_next_WP(struct Locations &loc);
 
 // ============================================================
 //  RC CHANNEL VARIABLES — Hasil parsing ELRS RC
@@ -673,6 +675,46 @@ void MavlinkHandler::handleCommandLong(const mavlink_message_t& msg) {
             break;
         }
 
+        case MAV_CMD_MISSION_START: {
+            uint16_t first_item = (uint16_t)cmd.param1;
+            if (first_item == 0) first_item = 1;
+            if (first_item < wp_sum) {
+                flag_wp = first_item;
+            } else {
+                flag_wp = 1;
+            }
+
+            if (flag_wp < wp_sum) {
+                target_altitude.amsl_cm = waypoint[flag_wp].alt;
+                set_next_WP(waypoint[flag_wp]);
+            }
+
+            mode_now = 3;
+            current  = ModeId::AUTO;
+            active_mode = ModeId::AUTO;
+            modes.setMode(ModeId::AUTO);
+            init_auto();
+            auto_navigation_mode = true;
+            auto_state.next_wp_crosstrack = false;
+
+            result = MAV_RESULT_ACCEPTED;
+            sendStatusText(MAV_SEVERITY_INFO, "MISSION START TRIGGERED");
+
+            // Immediate Heartbeat sync
+            mavlink_message_t hb_msg;
+            uint8_t system_status = arming ? MAV_STATE_ACTIVE : MAV_STATE_STANDBY;
+            uint8_t base_mode     = getBaseMode();
+            if (arming) base_mode |= MAV_MODE_FLAG_SAFETY_ARMED;
+            uint32_t custom_mode_out = getCustomMode();
+            mavlink_msg_heartbeat_pack(SYSTEM_ID, COMPONENT_ID, &hb_msg,
+                                       MAV_TYPE_FIXED_WING,
+                                       MAV_AUTOPILOT_ARDUPILOTMEGA,
+                                       base_mode, custom_mode_out, system_status);
+            mavSendAll(hb_msg);
+            lastHb = millis();
+            break;
+        }
+
         // ============================================================
         //  MAV_CMD_USER_1 — RPi mode lock control
         //  param1 = 1.0 → aktifkan lock (RPi berkuasa, remote diabaikan)
@@ -904,6 +946,7 @@ void MavlinkHandler::handleMissionItemInt(const mavlink_message_t& msg) {
         replyMission(req_int);
     } else {
         wp_sum = expected_count;
+        flag_wp = (wp_sum > 1) ? 1 : 0;
         mavlink_message_t ack;
         mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
                                      mission_target_sys, mission_target_comp,
@@ -961,6 +1004,7 @@ void MavlinkHandler::handleMissionItem(const mavlink_message_t& msg) {
         replyMission(req);
     } else {
         wp_sum = expected_count;
+        flag_wp = (wp_sum > 1) ? 1 : 0;
         mavlink_message_t ack;
         mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
                                      mission_target_sys, mission_target_comp,
@@ -999,6 +1043,17 @@ void MavlinkHandler::handleMissionSetCurrent(const mavlink_message_t& msg) {
     mavlink_msg_mission_set_current_decode(&msg, &set_cur);
     if (set_cur.seq < wp_sum) {
         flag_wp = set_cur.seq;
+        if (flag_wp <= 0) flag_wp = 1;
+
+        if (flag_wp < wp_sum) {
+            target_altitude.amsl_cm = waypoint[flag_wp].alt;
+            set_next_WP(waypoint[flag_wp]);
+        }
+
+        if (active_mode == ModeId::AUTO) {
+            auto_navigation_mode = true;
+            auto_state.next_wp_crosstrack = false;
+        }
     }
     mavlink_message_t reply;
     mavlink_msg_mission_current_pack(SYSTEM_ID, COMPONENT_ID, &reply, flag_wp);
@@ -1092,6 +1147,7 @@ uint8_t MavlinkHandler::getBaseMode() const {
                    MAV_MODE_FLAG_AUTO_ENABLED |
                    MAV_MODE_FLAG_STABILIZE_ENABLED;
         case ModeId::RTL:
+        case ModeId::LOITER:
             return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED |
                    MAV_MODE_FLAG_AUTO_ENABLED |
                    MAV_MODE_FLAG_STABILIZE_ENABLED;
