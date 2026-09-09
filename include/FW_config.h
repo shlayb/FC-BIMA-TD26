@@ -47,12 +47,12 @@ inline float rtl_altitude = 60.0f; // meter
 #define MAX_THROTTLE_PWM 2012  // PWM 2000+12
 #endif
 #ifndef THR_SLEW_RATE
-#define THR_SLEW_RATE 100
+#define THR_SLEW_RATE 30
 #endif
 
 /** TECS TUNE (Non-Airspeed Mode Defaults) - Single Source of Truth */
 inline float tecs_cruise_throttle = 55.0f; // % throttle saat terbang datar (FW_THR_CRUISE)
-inline float tecs_min_throttle    = 0.0f;  // % throttle minimal saat menukik (FW_THR_MIN)
+inline float tecs_min_throttle    = 25.0f; // % throttle minimal saat menukik (FW_THR_MIN - idle thrust)
 inline float tecs_max_throttle    = 85.0f; // % throttle maksimal saat menanjak (FW_THR_MAX)
 inline float min_gndspeed         = 17.0f; // m/s (safety floor angin sakal)
 

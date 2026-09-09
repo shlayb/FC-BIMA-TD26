@@ -45,15 +45,15 @@
     float _spdCompFiltOmega   = 2.0f;
     float _maxClimbRate       = 5.0f;
     float _minSinkRate        = 2.0f;
-    float _maxSinkRate        = 5.0f;
+    float _maxSinkRate        = 4.0f;
     float _timeConst          = 5.0f;//3.275f; 
     float _landTimeConst      = 2.0f;
-    float _ptchDamp           = 0.0f;
+    float _ptchDamp           = 0.15f; // Pitch damping untuk meredam osilasi ketinggian (ArduPilot default 0.0-0.1)
     float _land_pitch_damp    = 0;
     float _landDamp           = 0.5f;
     float _thrDamp            = 0.5f;
     float _land_throttle_damp = 0;
-    float _integGain          = 0.1f;
+    float _integGain          = 0.05f; // Integrator gain diperhalus untuk mencegah windup/overshoot
     float _integGain_takeoff  = 0;
     float _integGain_land     = 0;
     float _vertAccLim         = 7.0f;
@@ -278,7 +278,7 @@
 
     // Rate of change of velocity along X body axis in m/s^2
     float get_VXdot(void) {
-        return _vel_dot;
+        return _vel_dot;    
     }
 
     // return current target airspeed
@@ -564,33 +564,31 @@ void _update_height_demand()
 {
     float max_sink_rate = _maxSinkRate; 
 
-    // Limit height rate of change
-    if ((_hgt_dem - _hgt_dem_prev) > (_maxClimbRate * 0.1f))
+    // Limit height rate of change per loop step using actual _DT
+    float max_climb_step = _maxClimbRate * _DT;
+    float max_sink_step  = max_sink_rate * _DT;
+    if ((_hgt_dem - _hgt_dem_prev) > max_climb_step)
     {
-        _hgt_dem = _hgt_dem_prev + _maxClimbRate * 0.1f;
+        _hgt_dem = _hgt_dem_prev + max_climb_step;
     }
-    else if ((_hgt_dem - _hgt_dem_prev) < (-max_sink_rate * 0.1f))
+    else if ((_hgt_dem - _hgt_dem_prev) < -max_sink_step)
     {
-        _hgt_dem = _hgt_dem_prev - max_sink_rate * 0.1f;
+        _hgt_dem = _hgt_dem_prev - max_sink_step;
     }
     _hgt_dem_prev = _hgt_dem;
 
-    // Apply first order lag to height demand
-    _hgt_dem_adj = 0.05f * _hgt_dem + 0.95f * _hgt_dem_adj_last;
+    // float alpha = constrain(_DT / (2.0f + _DT), 0.001f, 0.5f);
+    // _hgt_dem_adj = alpha * _hgt_dem + (1.0f - alpha) * _hgt_dem_adj_last;
+    _hgt_dem_adj = _hgt_dem;
 
-    // when flaring force height rate demand to the
-    // configured sink rate and adjust the demanded height to
-    // be kinematically consistent with the height rate.
-
-    // for landing approach we will predict ahead by the time constant
-    // plus the lag produced by the first order filter. This avoids a
-    // lagged height demand while constantly descending which causes
-    // us to consistently be above the desired glide slope. This will
-    // be replaced with a better zero-lag filter in the future.
-    float new_hgt_dem = _hgt_dem_adj;
     hgt_dem_lag_filter_slew = 0;
+    if (_DT > 0.0001f) {
+        _hgt_rate_dem = (_hgt_dem_adj - _hgt_dem_adj_last) / _DT;
+    } else {
+        _hgt_rate_dem = 0.0f;
+    }
+    _hgt_rate_dem = constrain(_hgt_rate_dem, -max_sink_rate, _maxClimbRate);
     _hgt_dem_adj_last = _hgt_dem_adj;
-    _hgt_dem_adj = new_hgt_dem;
 }
 
 void _detect_underspeed(void)
@@ -764,6 +762,20 @@ void _update_throttle_without_airspeed(int16_t throttle_nudge)
     float cosPhi = sqrtf((rotMat.a.y * rotMat.a.y) + (rotMat.b.y * rotMat.b.y));
     float STEdot_dem = _rollComp * (1.0f / constrain(cosPhi * cosPhi, 0.1f, 1.0f) - 1.0f);
     _throttle_dem = _throttle_dem + STEdot_dem / (_STEdot_max - _STEdot_min) * (_THRmaxf - _THRminf);
+
+    // Constrain throttle demand
+    _throttle_dem = constrain(_throttle_dem, _THRminf, _THRmaxf);
+
+    // Rate limit throttle demand using THR_SLEW_RATE
+    float THRminf_clipped_to_zero = constrain(_THRminf, 0.0f, _THRmaxf);
+    if (THR_SLEW_RATE != 0 && _DT > 0.0001f)
+    {
+        float thrRateIncr = _DT * (_THRmaxf - THRminf_clipped_to_zero) * THR_SLEW_RATE * 0.01f;
+        _throttle_dem = constrain(_throttle_dem,
+                                  _last_throttle_dem - thrRateIncr,
+                                  _last_throttle_dem + thrRateIncr);
+    }
+    _last_throttle_dem = _throttle_dem;
 }
 
 void _detect_bad_descent(void)
@@ -946,7 +958,7 @@ void update_pitch_throttle( int32_t hgt_dem_cm,
     _EAS_dem = EAS_dem_cm; // equivalent airspeed
 
     // Update the speed estimate using a 2nd order complementary filter
-    _update_speed(load_factor);
+    _update_speed(_DT);
 
     _THRmaxf = tecs_max_throttle * 0.01f; // 0.85
     _THRminf = tecs_min_throttle * 0.01f; // 0.30
