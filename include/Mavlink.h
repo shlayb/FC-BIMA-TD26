@@ -191,8 +191,6 @@ private:
     //  PRIVATE: Telemetry senders
     // --------------------------------------------------------
     void sendCommandAck(uint16_t command, uint8_t result);
-    void sendStatusText(uint8_t severity, const char* text);
-    void sendHeartbeat();
     void sendAlert(const char* txt);
     void sendAltitude(float altitude);
     void sendAttitude(float roll_rad, float pitch_rad, float yaw_rad);
@@ -266,6 +264,8 @@ public:
     void mavlinkTask();              // Periodic telemetry sender
     void handlePorts();              // Parse incoming bytes dari semua port
 
+    void sendStatusText(uint8_t severity, const char* text);
+    void sendHeartbeat();
     void sendCustomTextToGCS(const char* text);
     void notifyWaypointReached(uint16_t seq);
 
@@ -816,12 +816,13 @@ void MavlinkHandler::handleMissionRequest(const mavlink_message_t& msg) {
     if (request.seq >= wp_sum) return;
 
     mavlink_message_t reply;
+    float rad = (request.seq < 100) ? waypoint_radius[request.seq] : 0.0f;
     mavlink_msg_mission_item_int_pack(
         SYSTEM_ID, COMPONENT_ID, &reply,
         msg.sysid, msg.compid,
         request.seq, MAV_FRAME_GLOBAL_RELATIVE_ALT,
         MAV_CMD_NAV_WAYPOINT, 0, 1,
-        0, 0, 0, 0,
+        0, rad, 0, 0,
         waypoint[request.seq].lat,
         waypoint[request.seq].lng,
         waypoint[request.seq].alt / 100.0f,
@@ -836,12 +837,13 @@ void MavlinkHandler::handleMissionRequestInt(const mavlink_message_t& msg) {
     if (request.seq >= wp_sum) return;
 
     mavlink_message_t reply;
+    float rad = (request.seq < 100) ? waypoint_radius[request.seq] : 0.0f;
     mavlink_msg_mission_item_int_pack(
         SYSTEM_ID, COMPONENT_ID, &reply,
         msg.sysid, msg.compid,
         request.seq, MAV_FRAME_GLOBAL_RELATIVE_ALT,
         MAV_CMD_NAV_WAYPOINT, 0, 1,
-        0, 0, 0, 0,
+        0, rad, 0, 0,
         waypoint[request.seq].lat,
         waypoint[request.seq].lng,
         waypoint[request.seq].alt / 100.0f,
@@ -934,6 +936,9 @@ void MavlinkHandler::handleMissionItemInt(const mavlink_message_t& msg) {
     waypoint[item.seq].lat = item.x;
     waypoint[item.seq].lng = item.y;
     waypoint[item.seq].alt = (int32_t)(item.z * 100.0f);
+    if (item.seq < 100) {
+        waypoint_radius[item.seq] = item.param2;
+    }
 
     current_upload_seq++;
 
@@ -993,6 +998,9 @@ void MavlinkHandler::handleMissionItem(const mavlink_message_t& msg) {
     waypoint[item.seq].lat = (int32_t)(item.x * 1e7);
     waypoint[item.seq].lng = (int32_t)(item.y * 1e7);
     waypoint[item.seq].alt = (int32_t)(item.z * 100.0f);
+    if (item.seq < 100) {
+        waypoint_radius[item.seq] = item.param2;
+    }
     current_upload_seq++;
 
     if (current_upload_seq < expected_count) {
@@ -1024,6 +1032,7 @@ void MavlinkHandler::handleMissionClearAll(const mavlink_message_t& msg) {
 
     wp_sum = 0;
     clearWaypointEEPROM();
+    memset(waypoint_radius, 0, sizeof(waypoint_radius));
     flag_wp = -1;
     flag_takeoff = -1;
     mission_state = MISSION_IDLE;
@@ -1561,6 +1570,16 @@ void MavlinkHandler::mavlinkTask() {
 void notifyWaypointReached(uint16_t seq) {
     extern MavlinkHandler mavHandler;
     mavHandler.notifyWaypointReached(seq);
+}
+
+void send_statustext_info(const char* text) {
+    extern MavlinkHandler mavHandler;
+    mavHandler.sendStatusText(MAV_SEVERITY_INFO, text);
+}
+
+void send_immediate_heartbeat() {
+    extern MavlinkHandler mavHandler;
+    mavHandler.sendHeartbeat();
 }
 // ============================================================
 //  PARAM: Kirim satu PARAM_VALUE ke GCS
