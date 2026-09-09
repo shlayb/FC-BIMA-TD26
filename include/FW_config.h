@@ -8,15 +8,20 @@
 #define HITL_ENABLED 0
 #endif
 
-// buat misi auto
+// buat misi auto (ArduPilot standard WP_RADIUS)
 #ifndef WP_RADIUS_DEFAULT
 #define WP_RADIUS_DEFAULT 40
 #endif
+inline float wp_radius = (float)WP_RADIUS_DEFAULT; // Radius penerimaan waypoint (meter)
 
 // loitering: wahana berputar2 di wp tertentu
 #ifndef LOITER_RADIUS_DEFAULT
 #define LOITER_RADIUS_DEFAULT 50
 #endif
+
+// Perilaku saat misi AUTO selesai (ArduPilot MIS_DONE_BEHAVE):
+// 0 = LOITER di waypoint terakhir, 1 = RTL ke HOME
+inline float mis_done_behave = 1.0f; // Default ArduPilot: 1 (RTL)
 
 inline float rtl_altitude = 60.0f; // meter
 #ifndef ALT_HOLD_HOME
@@ -32,11 +37,8 @@ inline float rtl_altitude = 60.0f; // meter
 #ifndef THROTTLE_MIN
 #define THROTTLE_MIN 0  // percent
 #endif
-#ifndef THROTTLE_CRUISE
-#define THROTTLE_CRUISE 60  // mode auto (percent) — harus sinkron dengan tecs_cruise_throttle!
-#endif
 #ifndef THROTTLE_MAX
-#define THROTTLE_MAX 100
+#define THROTTLE_MAX 100 // percent
 #endif
 #ifndef MIN_THROTTLE_PWM
 #define MIN_THROTTLE_PWM 988  // PWM 1000-12
@@ -48,21 +50,18 @@ inline float rtl_altitude = 60.0f; // meter
 #define THR_SLEW_RATE 100
 #endif
 
-/** TECS TUNE (Non-Airspeed Mode Defaults) */
-inline float tecs_cruise_throttle = 70.0f; // % throttle saat terbang datar
-inline float tecs_min_throttle    = 30.0f; // % throttle minimal saat menukik
-inline float tecs_max_throttle    = 85.0f; // % throttle maksimal saat menanjak
+/** TECS TUNE (Non-Airspeed Mode Defaults) - Single Source of Truth */
+inline float tecs_cruise_throttle = 55.0f; // % throttle saat terbang datar (FW_THR_CRUISE)
+inline float tecs_min_throttle    = 0.0f;  // % throttle minimal saat menukik (FW_THR_MIN)
+inline float tecs_max_throttle    = 85.0f; // % throttle maksimal saat menanjak (FW_THR_MAX)
 inline float min_gndspeed         = 17.0f; // m/s (safety floor angin sakal)
 
-#ifndef TECS_MAX_THROTTLE
-#define TECS_MAX_THROTTLE 85
-#endif
-#ifndef TECS_CRUISE_THROTTLE
-#define TECS_CRUISE_THROTTLE 70
-#endif
-#ifndef TECS_MIN_THROTTLE
-#define TECS_MIN_THROTTLE 60
-#endif
+// Aliases for backwards compatibility - always points to the authoritative variables
+#define THROTTLE_CRUISE       (tecs_cruise_throttle)
+#define TECS_CRUISE_THROTTLE  (tecs_cruise_throttle)
+#define TECS_MIN_THROTTLE     (tecs_min_throttle)
+#define TECS_MAX_THROTTLE     (tecs_max_throttle)
+
 #ifndef TECS_TIME_CONST
 #define TECS_TIME_CONST 8
 #endif

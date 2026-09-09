@@ -338,6 +338,12 @@
     float get_tecs_max_throttle(){
         return tecs_max_throttle;
     }
+    void set_tecs_cruise_throttle(float value){
+        tecs_cruise_throttle = value;
+    }
+    float get_tecs_cruise_throttle(){
+        return tecs_cruise_throttle;
+    }
 
 float timeConstant(void)
 {    

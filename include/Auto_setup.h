@@ -30,6 +30,7 @@ bool rpi_external_setpoint_yaw_valid = false;
 
 
 Locations waypoint[100];
+inline float waypoint_radius[100]{}; // Acceptance radius per-waypoint dari MAVLink (0 = pakai wp_radius global)
 // Locations landing[1]; //conflic declaration
 Locations _takeoff[1]; //conflic declaration
 /** previous waypoint */
@@ -41,6 +42,37 @@ Locations next_WP_loc{};
 /* Home/Launch waypoint*/
 Locations home_wp_loc{};
 float acceptance_distance_m;
+
+// =====================================================================
+//  Loiter state variables (ArduPilot WP_LOITER_RAD convention)
+// =====================================================================
+/** Pusat lingkaran loiter (GPS) */
+Locations loiter_center_loc{};
+
+/** Radius loiter dalam meter (default 50m). ArduPilot convention:
+ *  Positif = Clockwise (CW), Negatif = Counter-Clockwise (CCW) */
+float loiter_mode_radius = LOITER_RADIUS_DEFAULT;
+
+/** Arah loiter: 1 = CW (clockwise), -1 = CCW (counter-clockwise) */
+int8_t loiter_mode_direction = 1;
+
+/** Target altitude saat loiter (cm AMSL) */
+float loiter_target_alt_cm = 0.0f;
+
+/** Bank angle limit untuk loiter (degrees) */
+float loiter_bank_limit = 35.0f;
+
+/** Flag apakah target custom sudah diset sebelum masuk mode LOITER (misal dari misi AUTO) */
+bool loiter_custom_target_set = false;
+
+/** Set target loiter kustom (pusat dan altitude) */
+inline void loiter_set_target(const Locations &loc, float alt_cm = 0.0f) {
+    loiter_center_loc = loc;
+    if (alt_cm > 0.0f) {
+        loiter_target_alt_cm = alt_cm;
+    }
+    loiter_custom_target_set = true;
+}
 // struct
 // {
 //     /** constrain the roll */
