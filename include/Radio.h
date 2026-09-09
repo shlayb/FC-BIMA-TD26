@@ -9,8 +9,10 @@ bfs::SbusRx sbus_rx(&Serial8);
 bfs::SbusData data;
 
 bool signal_lost = false;
-uint16_t ch_roll, ch_pitch, ch_throttle, ch_yaw, ch_mode, ch_mode_backup, ch_vehicle_mode, ch5, ch6, ch7, ch8;
-bool arming;
+uint16_t ch_roll = 1500, ch_pitch = 1500, ch_throttle = 988, ch_yaw = 1500;
+uint16_t ch_mode = 1000, ch_mode_backup = 1000, ch_vehicle_mode = 1000;
+uint16_t ch5 = 1000, ch6 = 1000, ch7 = 1000, ch8 = 1000;
+bool arming = false;
 bool rpi_mode_lock = false;
 
 // enum MODE
@@ -47,32 +49,22 @@ float outputScaler(uint16_t ch)
 void remote_setup() {
     sbus_rx.Begin();
 
+    // Default safe initial values
+    ch_roll = 1500;
+    ch_pitch = 1500;
+    ch_throttle = 988;
+    ch_yaw = 1500;
+    ch_mode = 1000;
+    ch_mode_backup = 1000;
+    arming = false;
+    signal_lost = true;
+
+    // Cek apakah remote sudah terhubung saat booting (non-blocking)
     if (sbus_rx.Read()) {
         data = sbus_rx.data();
-
-        arming = data.ch[4] > 1500 ? 1 : 0;
-        signal_lost = data.lost_frame;
-
-        if (arming) {
-            Serial.println("Please disarm the remote for safety");
-            while (arming) {
-                if (sbus_rx.Read()) {
-                    data = sbus_rx.data();
-                    arming = data.ch[4] > 1500 ? 1 : 0;
-                    signal_lost = data.lost_frame;
-                }
-            }
-        }
-
-        if (signal_lost) {
-            Serial.println("Signal lost, please reconnect");
-            while (signal_lost) {
-                if (sbus_rx.Read()) {
-                    data = sbus_rx.data();
-                    arming = data.ch[4] > 1500 ? 1 : 0;
-                    signal_lost = data.lost_frame;
-                }
-            }
+        if (!data.failsafe && !data.lost_frame && data.ch[0] > 50) {
+            arming = data.ch[4] > 1500 ? 1 : 0;
+            signal_lost = false;
         }
     }
 
@@ -83,6 +75,14 @@ void remote_setup() {
 void remote_loop() {
     if (sbus_rx.Read()) {
         data = sbus_rx.data();
+
+        // Validasi frame SBUS: abaikan jika failsafe, lost frame, atau channel 0 belum ada sinyal
+        if (data.failsafe || data.lost_frame || data.ch[0] < 50) {
+            signal_lost = true;
+            return;
+        }
+
+        signal_lost = false;
 
         //remot juang
         ch_roll = data.ch[0] * 0.6267f + 877.91f;
@@ -96,12 +96,14 @@ void remote_loop() {
         ch_yaw = constrain(ch_yaw, 988, 2012);
 
         arming = data.ch[4] > 1500 ? 1 : 0;
-        signal_lost = data.lost_frame;
 
-        
         ch_mode = data.ch[5] * 0.6267f + 877.91f;
         ch_mode_backup = data.ch[6] * 0.6267f + 877.91f;
         ch_vehicle_mode = data.ch[7] * 0.6267f + 877.91f;
+
+        ch_mode = constrain(ch_mode, 988, 2012);
+        ch_mode_backup = constrain(ch_mode_backup, 988, 2012);
+        ch_vehicle_mode = constrain(ch_vehicle_mode, 988, 2012);
 
         //Scaling to pwm
         // ch_roll = data.ch[0] * 0.6248f + 880.54f;

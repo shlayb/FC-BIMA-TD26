@@ -108,9 +108,9 @@ float scaleToPercent_reversed(uint16_t ch) {
 
 // kebalikan scale to angle
 uint16_t angleToPwm(float angle /*, uint16_t servo_trim*/) {
-    uint16_t servo_out;
-    servo_out = (11.378 * angle) + 1500;
-    return servo_out;
+    if (isnan(angle)) return 1500;
+    int servo_out = (int)(11.378f * angle) + 1500;
+    return (uint16_t)constrain(servo_out, 988, 2012);
 }
 
 // ignore (karena dulu di reversenya dr sinyal keluaran kendali)
@@ -147,6 +147,12 @@ void init_actuator() {
     payload.attach((int)SERVO_PAYLOAD);
     pusher.attach((int)THROTTLE);
 
+    // Langsung center ke 1500us saat boot agar servo tidak nyangkut/mentok
+    aileron_L.writeMicroseconds(1500);
+    aileron_R.writeMicroseconds(1500);
+    elevator.writeMicroseconds(1500);
+    rudder_L.writeMicroseconds(1500);
+    rudder_R.writeMicroseconds(1500);
     pusher.writeMicroseconds(988);
     payload.writeMicroseconds(1000); // default hold
     servo_pwm_payload = 1000;        // make sure the variable is initialized
@@ -330,19 +336,23 @@ void copter_calcOutput(int16_t ch_thr)
 }
 
 void servos_out_manual() {
-    aileron_L.writeMicroseconds((ch_roll));  // 45 = trim wahana FW
-    aileron_R.writeMicroseconds((ch_roll));  // TODO: besok 24 feb di 0 in dulu
-    elevator.writeMicroseconds((ch_pitch));
-    rudder_L.writeMicroseconds(ch_yaw);
-    rudder_R.writeMicroseconds(ch_yaw);
+    uint16_t safe_roll  = (ch_roll >= 900 && ch_roll <= 2100) ? ch_roll : 1500;
+    uint16_t safe_pitch = (ch_pitch >= 900 && ch_pitch <= 2100) ? ch_pitch : 1500;
+    uint16_t safe_yaw   = (ch_yaw >= 900 && ch_yaw <= 2100) ? ch_yaw : 1500;
+
+    aileron_L.writeMicroseconds(safe_roll);  // 45 = trim wahana FW
+    aileron_R.writeMicroseconds(safe_roll);  // TODO: besok 24 feb di 0 in dulu
+    elevator.writeMicroseconds(safe_pitch);
+    rudder_L.writeMicroseconds(safe_yaw);
+    rudder_R.writeMicroseconds(safe_yaw);
 }
 
 void fw_servos_out_fbwa() {
     // Hitung output servo dari kontrol pitch, roll, yaw
-    pwm_ail_L = fw_control.servos[0] + 1500;
-    pwm_ail_R = fw_control.servos[1] + 1500;       
-    pwm_ele   = fw_control.servos[2] + 1500;
-    pwm_rud   = fw_control.servos[3] + 1500;
+    pwm_ail_L = constrain(fw_control.servos[0] + 1500, 988, 2012);
+    pwm_ail_R = constrain(fw_control.servos[1] + 1500, 988, 2012);       
+    pwm_ele   = constrain(fw_control.servos[2] + 1500, 988, 2012);
+    pwm_rud   = constrain(fw_control.servos[3] + 1500, 988, 2012);
 
     // Output ke servo
     aileron_L.writeMicroseconds(pwm_ail_L);
@@ -419,9 +429,15 @@ void motor_loop_nyt(int pwm1, int pwm2, int pwm3, int pwm4, int pwm_yaw_l = 0, i
 
 //tambah pwm untuk yaw
 void servos_out_manual_flywing() {
+    uint16_t safe_roll  = (ch_roll >= 900 && ch_roll <= 2100) ? ch_roll : 1500;
+    uint16_t safe_pitch = (ch_pitch >= 900 && ch_pitch <= 2100) ? ch_pitch : 1500;
+
+    int pwm_l = constrain(abs(basePWM - ((safe_pitch)+(safe_roll))), 988, 2012);
+    int pwm_r = constrain(abs(basePWM - ((safe_pitch)-(safe_roll))), 988, 2012);
+
     // Output elevon (pitch + roll)
-    aileron_L.writeMicroseconds(abs(basePWM - ((ch_pitch)+(ch_roll))));
-    aileron_R.writeMicroseconds(abs(basePWM - ((ch_pitch)-(ch_roll))));
+    aileron_L.writeMicroseconds(pwm_l);
+    aileron_R.writeMicroseconds(pwm_r);
 
     // Throttle + yaw untuk motor kanan & kiri
     // float throttle_pwm = ch_throttle;
@@ -448,9 +464,12 @@ void servos_out_fbwa_flywing() {
     pwm_ail_R = angleToPwm(u_roll);
     pwm_ele   = angleToPwm(u_pitch);
 
+    int pwm_l = constrain(abs(basePWM - ((pwm_ele)+(pwm_ail_L))), 988, 2012);
+    int pwm_r = constrain(abs(basePWM - ((pwm_ele)-(pwm_ail_R))), 988, 2012);
+
     // Output ke elevon (pitch + roll)
-    aileron_L.writeMicroseconds(abs(basePWM - ((pwm_ele)+(pwm_ail_L))));
-    aileron_R.writeMicroseconds(abs(basePWM - ((pwm_ele)-(pwm_ail_R))));
+    aileron_L.writeMicroseconds(pwm_l);
+    aileron_R.writeMicroseconds(pwm_r);
 
     // Throttle dari autopilot / TECS
     float throttle_pwm = ch_throttle; // sudah dalam bentuk PWM
@@ -528,19 +547,19 @@ void servos_out_fbwa_auto()
 }
 
 float PercenttoPWM(float Percent){
-   Percent = map(Percent, 0, 100, 988, 2012); 
+   Percent = map(Percent, 0, 100, MIN_THROTTLE_PWM, MAX_THROTTLE_PWM); 
    return Percent;
 }
 
-void plane_motors_out() { //GA KEPAKE
+void plane_motors_out() {
     motor_pwm = ch_throttle;
     if (mode_fbwa_plane) {                                                     // mode_fbwa
         motor_pwm = constrain(motor_pwm, MIN_THROTTLE_PWM, MAX_THROTTLE_PWM);  // pwmnya gabisa maks 100 persen krn diatur sesuai min dan max throttle
     }
     if (arming) {
-        pusher.writeMicroseconds(motor_pwm);  // ch_throttle (jgn pake ini dulu)
+        pusher.writeMicroseconds(motor_pwm);  // ch_throttle
     } else if (!arming) {
-        pusher.writeMicroseconds(988);
+        pusher.writeMicroseconds(MIN_THROTTLE_PWM);
     }
 }
 
@@ -585,7 +604,7 @@ void plane_motors_out_auto(float pwm = -1.0f) {
     if (arming) {
         pusher.writeMicroseconds(motor_pwm);  // Dapatkan throttle dari kontrol otomatis
     } else {
-        pusher.writeMicroseconds(988);
+        pusher.writeMicroseconds(MIN_THROTTLE_PWM);
     }
 }
 
