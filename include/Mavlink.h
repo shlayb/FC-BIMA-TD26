@@ -342,7 +342,13 @@ void MavlinkHandler::applyRcToGlobals(uint16_t c1, uint16_t c2, uint16_t c3,
     apply(ch_throttle, c3);
     apply(ch_yaw,      c4);
     apply(ch5,         c5);
-    arming = ch5 > 1500 ? 1 : 0; // Contoh: channel 5 sebagai switch arming
+    // Edge detection switch arming agar tidak menimpa perintah arming dari Mission Planner / GCS
+    static bool last_mav_rc_arm_switch = false;
+    bool mav_rc_arm_switch = (ch5 > 1500);
+    if (mav_rc_arm_switch != last_mav_rc_arm_switch) {
+        arming = mav_rc_arm_switch;
+        last_mav_rc_arm_switch = mav_rc_arm_switch;
+    }
     apply(ch_mode,         c6);
     apply(ch_mode_backup,         c7);
 
@@ -602,21 +608,24 @@ void MavlinkHandler::handleCommandLong(const mavlink_message_t& msg) {
         case MAV_CMD_COMPONENT_ARM_DISARM: {
             float arm_value = cmd.param1;
             float force     = cmd.param2;
-            Serial.printf("ARM REQ: arm=%.1f, force=%.1f\n", arm_value, force);
+            bool is_force   = (force == 21196.0f || force >= 1.0f);
+            Serial.printf("ARM REQ: arm=%.1f, force=%.1f (is_force=%d)\n", arm_value, force, is_force);
 
             if (arm_value == 1.0f) {
-                if (gepees.getStatus() < 2 && force != 21196.0f) {
+                if (gepees.getStatus() < 2 && !is_force) {
                     result = MAV_RESULT_DENIED;
-                    sendStatusText(MAV_SEVERITY_WARNING, "ARM DENIED: NO GPS FIX");
+                    sendStatusText(MAV_SEVERITY_WARNING, "ARM DENIED: NO GPS FIX (Use Force Arm in Actions tab)");
                 } else {
                     arming = true;
                     result = MAV_RESULT_ACCEPTED;
-                    sendStatusText(MAV_SEVERITY_INFO, "ARMED");
+                    sendStatusText(MAV_SEVERITY_INFO, is_force ? "ARMED (FORCE)" : "ARMED");
+                    sendHeartbeat(); // Langsung sync status ARMED ke GCS
                 }
             } else if (arm_value == 0.0f) {
                 arming = false;
                 result = MAV_RESULT_ACCEPTED;
                 sendStatusText(MAV_SEVERITY_INFO, "DISARMED");
+                sendHeartbeat();
             }
             break;
         }

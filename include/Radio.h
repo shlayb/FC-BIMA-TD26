@@ -95,7 +95,13 @@ void remote_loop() {
         ch_throttle = constrain(ch_throttle, 988, 2012);
         ch_yaw = constrain(ch_yaw, 988, 2012);
 
-        arming = data.ch[4] > 1500 ? 1 : 0;
+        // Edge detection switch arming agar tidak menimpa perintah arming dari Mission Planner / GCS
+        static bool last_rc_arm_switch = false;
+        bool rc_arm_switch = (data.ch[4] > 1500);
+        if (rc_arm_switch != last_rc_arm_switch) {
+            arming = rc_arm_switch;
+            last_rc_arm_switch = rc_arm_switch;
+        }
 
         ch_mode = data.ch[5] * 0.6267f + 877.91f;
         ch_mode_backup = data.ch[6] * 0.6267f + 877.91f;
