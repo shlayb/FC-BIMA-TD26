@@ -9,6 +9,7 @@
 #define BUZZER_DELAY_MS 100
 #define BUZZER_FREQ 4000
 #define BEEP_DURATION 100
+#define NOTE_REST 0
 
 #define NOTE_C6  1047
 #define NOTE_CS6 1109
@@ -105,26 +106,45 @@ void Buzzer::initWithMusic() {
         // };
 
         // Mario Bros Theme
+        // const int notes[] = {
+        // NOTE_E7, NOTE_E7, NOTE_E7, NOTE_C7, NOTE_E7, NOTE_G7, NOTE_G6, NOTE_G6
+        //  };
+
+        // const int durations[] = {
+        // 175, 175, 175, 175, 175, 350, 350, 350
+        // };
+
+        // Megalovania (Sans) - Authentic Rhythm & Syncopation
         const int notes[] = {
-        NOTE_E7, NOTE_E7, NOTE_E7, NOTE_C7, NOTE_E7, NOTE_G7, NOTE_G6, NOTE_G6
-         };
+            NOTE_D6, NOTE_D6, NOTE_D7, NOTE_A6, NOTE_REST, NOTE_GS6, NOTE_G6, NOTE_F6, NOTE_D6, NOTE_F6, NOTE_G6
+        };
 
         const int durations[] = {
-        175, 175, 175, 175, 175, 350, 350, 350
+            125,     125,     250,     375,     125,       250,      250,     250,     125,     125,     400
         };
-        
-        const float staccatoFactor = 0.7;  
+
+        const float staccatoFactor = 0.85f;  
         int totalNotes = sizeof(notes) / sizeof(notes[0]);
 
         if (currentNote < totalNotes) {
-            if (currentTime - lastNoteTime >= durations[currentNote]) {
-                int playDuration = durations[currentNote] * staccatoFactor;
-                tone(BUZZER_PIN, notes[currentNote], playDuration);
-                lastNoteTime = currentTime;
-                currentNote++;
+            // Not pertama langsung bunyi tanpa delay; not berikutnya tunggu durasi not sebelumnya selesai
+            if (currentNote == 0 || (currentTime - lastNoteTime >= durations[currentNote - 1])) {
+                int noteFreq = notes[currentNote];
+                int noteDur  = durations[currentNote];
+                int playDur  = (int)(noteDur * staccatoFactor);
+
+                if (noteFreq > 0) {
+                    tone(BUZZER_PIN, noteFreq, playDur);
+                } else {
+                    noTone(BUZZER_PIN);
                 }
 
-            } else {
+                lastNoteTime = currentTime;
+                currentNote++;
+            }
+        } else {
+            // Tunggu not terakhir selesai berkumandang sebelum mengakhiri musik
+            if (currentTime - lastNoteTime >= durations[totalNotes - 1]) {
                 noTone(BUZZER_PIN);
                 isPlayingInitMusic = false;
                 in_transition = true;
@@ -138,6 +158,7 @@ void Buzzer::initWithMusic() {
             }
         }
     }
+}
 
 void Buzzer::loop() {
     unsigned long current_time = millis();
