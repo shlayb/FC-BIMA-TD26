@@ -176,6 +176,14 @@ void init_actuator() {
         Serial.println("VTOL Motors initialized");
     }
 
+    Serial.println("[ACTUATOR] Pin Mapping Active:");
+    Serial.printf("  MTR 3 (AIL_L)   : Pin %d\n", (int)SERVO_AIL_L);
+    Serial.printf("  MTR 2 (ELE)     : Pin %d\n", (int)SERVO_ELE);
+    Serial.printf("  MTR 1 (RUD_L)   : Pin %d\n", (int)SERVO_RUD_L);
+    Serial.printf("  MTR 5 (AIL_R)   : Pin %d\n", (int)SERVO_AIL_R);
+    Serial.printf("  MTR 11 (RUD_R)  : Pin %d\n", (int)SERVO_RUD_R);
+    Serial.printf("  MTR 4 (THROTTLE): Pin %d\n", (int)THROTTLE);
+    Serial.printf("  MTR 6 (PAYLOAD) : Pin %d\n", (int)SERVO_PAYLOAD);
     Serial.println("Actuator setup complete");
 }
 

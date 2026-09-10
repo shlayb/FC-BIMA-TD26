@@ -1563,22 +1563,22 @@ void MavlinkHandler::mavlinkTask() {
     }
 
     // Debug GPS M10: cek apakah UBX (NAV-PVT) benar-benar diterima & berapa satelit
-    if (now - lastGpsDebug >= GPS_DEBUG_MS) {
-        lastGpsDebug = now;
-        char gps_dbg[90];
-        snprintf(gps_dbg, sizeof(gps_dbg), "GPS M10: baud=%lu ubx=%d fixType=%d sat=%d pdop=%.1f pkt=%lu",
-                 (unsigned long)gepees.baudRate, (int)gepees.ubx_handshake_ok,
-                 (int)gepees.fixType, (int)gepees.satellites, gepees.hdop,
-                 (unsigned long)gepees.ubxPacketsOk);
-        sendStatusText(MAV_SEVERITY_INFO, gps_dbg);
+    // if (now - lastGpsDebug >= GPS_DEBUG_MS) {
+    //     lastGpsDebug = now;
+    //     char gps_dbg[90];
+    //     snprintf(gps_dbg, sizeof(gps_dbg), "GPS M10: baud=%lu ubx=%d fixType=%d sat=%d pdop=%.1f pkt=%lu",
+    //              (unsigned long)gepees.baudRate, (int)gepees.ubx_handshake_ok,
+    //              (int)gepees.fixType, (int)gepees.satellites, gepees.hdop,
+    //              (unsigned long)gepees.ubxPacketsOk);
+    //     sendStatusText(MAV_SEVERITY_INFO, gps_dbg);
 
-        // Debug kompas IST8310 onboard modul M10 (I2C Wire2, pin SDA25/SCL24)
-        char cmp_dbg[90];
-        snprintf(cmp_dbg, sizeof(cmp_dbg), "COMPASS M10: hdg=%.1f mx=%.1f my=%.1f mz=%.1f bno=%d",
-                 compass.getHeadingDeg(), compass.getMagX(), compass.getMagY(), compass.getMagZ(),
-                 (int)imu.isBNOConnected());
-        sendStatusText(MAV_SEVERITY_INFO, cmp_dbg);
-    }
+    //     // Debug kompas IST8310 onboard modul M10 (I2C Wire2, pin SDA25/SCL24)
+    //     char cmp_dbg[90];
+    //     snprintf(cmp_dbg, sizeof(cmp_dbg), "COMPASS M10: hdg=%.1f mx=%.1f my=%.1f mz=%.1f bno=%d",
+    //              compass.getHeadingDeg(), compass.getMagX(), compass.getMagY(), compass.getMagZ(),
+    //              (int)imu.isBNOConnected());
+    //     sendStatusText(MAV_SEVERITY_INFO, cmp_dbg);
+    // }
 
     // Attitude
     if (now - lastAtt >= ATT_MS) {

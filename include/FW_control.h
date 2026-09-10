@@ -153,7 +153,8 @@ void FW_CONTROL::getIntegral(int16_t ch_thr, float roll, float pitch, float yaw)
 }
 
 void FW_CONTROL::updateAUTO_FW(float roll, float pitch, float yaw, float gy, float gx, float gz) {
-    int auto_thr = get_auto_throttle();
+    // int auto_thr = get_auto_throttle(); // INI AUTO THROT
+    int auto_thr = ch_throttle;
     getIntegral(auto_thr, roll, pitch, yaw);
 
     // Gunakan Single Source of Truth dari Navigation / TECS (sudah dihitung di update_tecs)

@@ -16,8 +16,10 @@ protected:
     auto_navigation_mode = false;
     alt_hold             = false;  // STB = pure manual throttle, no alt hold
     pos_hold             = false;
-    min_roll = min_roll_default;
-    max_roll = max_roll_default;
+    min_roll             = min_roll_default;
+    max_roll             = max_roll_default;
+    mode_phase           = 1;
+    current              = ModeId::COPT;
     return true;
   }
 
@@ -40,9 +42,6 @@ protected:
 
     // Pusher motor fixed-wing dipastikan mati saat mode copter
     pusher.writeMicroseconds(988);
-
-    mode_phase = 1;
-    current = ModeId::COPT;
   }
 
   void _exit() override {
@@ -61,8 +60,10 @@ protected:
     alt_hold             = true;   // QHOV = altitude hold aktif
     pos_hold             = false;
     alt_hold_on          = false;  // trigger re-latch alt_ref saat pertama hover
-    min_roll = min_roll_default;
-    max_roll = max_roll_default;
+    min_roll             = min_roll_default;
+    max_roll             = max_roll_default;
+    mode_phase           = 2;
+    current              = ModeId::QHOV;
     return true;
   }
 
@@ -84,9 +85,6 @@ protected:
     }
 
     pusher.writeMicroseconds(988);
-
-    mode_phase = 2;
-    current = ModeId::QHOV;
   }
 
   void _exit() override {
@@ -106,6 +104,8 @@ protected:
     alt_hold             = true;
     pos_hold             = true;
     alt_hold_on          = false;
+    mode_phase           = 3;
+    current              = ModeId::GUIDED;
     return true;
   }
 
@@ -150,9 +150,6 @@ protected:
     }
 
     pusher.writeMicroseconds(988);
-
-    mode_phase = 3;
-    current = ModeId::GUIDED;
   }
 
   void _exit() override {

@@ -146,14 +146,15 @@ protected:
     // 4. Actuator outputs
     payload_control_unified();
     fw_servos_out_fbwa();
-    plane_motors_out_auto(); // Full TECS auto throttle control
+    // plane_motors_out_auto(); // Full TECS auto throttle control
+    plane_motors_out();
 
 #if !HITL_ENABLED
-    Serial.print("demanded_pitch:"); Serial.print(get_pitch_demand());
-    Serial.print(" |nav_pitch_deg:"); Serial.print(nav_pitch_deg);
-    Serial.print(" |demanded_roll:"); Serial.print(nav_roll_cd()/100.0f);
-    Serial.print(" |nav_roll_deg:"); Serial.print(nav_roll_deg);
-    Serial.print(" |auto_thr:"); Serial.println(fw_control.get_auto_throttle());
+    // Serial.print("demanded_pitch:"); Serial.print(get_pitch_demand());
+    // Serial.print(" |nav_pitch_deg:"); Serial.print(nav_pitch_deg);
+    // Serial.print(" |demanded_roll:"); Serial.print(nav_roll_cd()/100.0f);
+    // Serial.print(" |nav_roll_deg:"); Serial.print(nav_roll_deg);
+    // Serial.print(" |auto_thr:"); Serial.println(fw_control.get_auto_throttle());
 #endif
   }
 
@@ -217,7 +218,7 @@ protected:
     // Ketinggian aman RTL: rtl_altitude (default 60m) di atas HOME
     target_altitude.amsl_cm = (int32_t)(rtl_altitude * M_TO_CM);
     target_airspeed = AIRSPEED_CRUISE;
-    Serial.println("[MODE] >>> ENTERING RTL MODE (Returning Home) <<<");
+    // Serial.println("[MODE] >>> ENTERING RTL MODE (Returning Home) <<<");
     return true;
   }
 
@@ -411,7 +412,8 @@ protected:
 
         // ---- 7. Output ke actuator ----
         fw_servos_out_fbwa();
-        plane_motors_out_auto();
+        // plane_motors_out_auto();
+        plane_motors_out();
         payload_control_unified();
 
         // ---- 8. Update lap counter & timer ----

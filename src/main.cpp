@@ -20,6 +20,7 @@
 #include "Params.h"
 #include <WP_EEPROM.h>
 #include <HITL_Bridge.h>
+#include "drivers/ncp5623.h"
 
 #define HITL_time     5     // 200 Hz — Fast serial RX/TX for HITL
  
@@ -144,6 +145,7 @@ void GPS(void *pvParameters){
     for(;;){
 #if !HITL_ENABLED
         gepees.updateGPS();
+        update_gps_led();
 #endif
         vTaskDelay(pdMS_TO_TICKS(GPS_time)); // Reduced delay for more frequent updates
     }
@@ -336,6 +338,41 @@ void wp_setup() {
 #endif
 }
 
+// void scan_i2c_bus(const char* name, TwoWire &bus) {
+//     SERIAL_USB.printf("\n--- Scanning %s ---\n", name);
+//     bus.begin();
+//     bus.setClock(100000);
+//     int count = 0;
+//     for (uint8_t addr = 1; addr < 127; addr++) {
+//         bus.beginTransmission(addr);
+//         uint8_t err = bus.endTransmission();
+//         if (err == 0) {
+//             SERIAL_USB.printf("  [FOUND] 0x%02X", addr);
+//             if (addr == 0x0E) SERIAL_USB.print(" -> IST8310 Compass");
+//             else if (addr == 0x39) SERIAL_USB.print(" -> NCP5623 RGB LED");
+//             else if (addr == 0x28) SERIAL_USB.print(" -> MS4525D Airspeed / BNO055");
+//             else if (addr == 0x29) SERIAL_USB.print(" -> BNO055 IMU");
+//             else if (addr == 0x46 || addr == 0x47) SERIAL_USB.print(" -> BMP581 Barometer");
+//             else if (addr == 0x68 || addr == 0x69) SERIAL_USB.print(" -> MPU6050");
+//             SERIAL_USB.println();
+//             count++;
+//         }
+//     }
+//     if (count == 0) {
+//         SERIAL_USB.printf("  [EMPTY] Tidak ada device terdeteksi di %s\n", name);
+//     }
+// }
+
+// void run_i2c_scanner() {
+//     SERIAL_USB.println("\n==========================================");
+//     SERIAL_USB.println("         I2C BUS DIAGNOSTIC SCAN          ");
+//     SERIAL_USB.println("==========================================");
+//     scan_i2c_bus("Wire  (Pin 19 SCL, Pin 18 SDA)", Wire);
+//     scan_i2c_bus("Wire1 (Pin 16 SCL, Pin 17 SDA)", Wire1);
+//     scan_i2c_bus("Wire2 (Pin 24 SCL, Pin 25 SDA)", Wire2);
+//     SERIAL_USB.println("==========================================\n");
+// }
+
 void setup() {
     milisawal = getMillis();
  
@@ -360,8 +397,10 @@ void setup() {
     SERIAL_RASPI.begin(57600);
     SERIAL_RASPI.addMemoryForRead(dma_rx1,  sizeof(dma_rx1));
     SERIAL_RASPI.addMemoryForWrite(dma_tx1, sizeof(dma_tx1));
-    delay(100);
+    delay(500);
  
+    // run_i2c_scanner();
+
     hitl.init(HITL_ENABLED);
 
     // --- Waypoint ---
