@@ -174,10 +174,8 @@ void mavlink_print(void *pvParameters) {
     TickType_t xLastWake = xTaskGetTickCount();
     const TickType_t xPeriod = pdMS_TO_TICKS(MAVLINK_time);
     for (;;) {
-#if !HITL_ENABLED
         mavHandler.handlePorts();
         mavHandler.mavlinkTask();
-#endif
         // Kalau task overrun, reset xLastWake agar tidak catch-up
         if ((xTaskGetTickCount() - xLastWake) >= xPeriod) {
             xLastWake = xTaskGetTickCount();  // ← reset, skip catch-up
@@ -335,6 +333,9 @@ void setup() {
  
     // --- Serial ---
     SERIAL_USB.begin(115200);
+#if defined(USB_DUAL_SERIAL) || defined(USB_TRIPLE_SERIAL)
+    SerialUSB1.begin(115200);
+#endif
     SERIAL_UART.begin(57600);
     SERIAL_UART.addMemoryForRead(dma_rx2,  sizeof(dma_rx2));
     SERIAL_UART.addMemoryForWrite(dma_tx2, sizeof(dma_tx2));
@@ -400,6 +401,7 @@ void setup() {
     xTaskCreate(hitlTask,     "HITL",    4096, NULL,  6,  &Task_HITL);     // 200 Hz
     xTaskCreate(controlThd,   "Control", 8192, NULL,  5,  &Task_Control);  // 200 Hz — logic kompleks
     // xTaskCreate(buzzerTask,   "Buzzer",  2048, NULL,  3,  &Task_Buzzer);   // 100 Hz
+    xTaskCreate(mavlink_print,"Mavlink", 8192, NULL,  5,  &Task_Mavlink); // 100 Hz real-time
 #else
     // Mode Terbang Nyata
     //                 fungsi          nama        stack  param  prio           handle

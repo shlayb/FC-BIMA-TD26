@@ -266,6 +266,26 @@ inline void saveParamsToEEPROM() {
                   PARAM_EEPROM::ADDR_DATA + PARAM_COUNT * sizeof(float));
 }
 
+inline bool saveSingleParamToEEPROM(uint16_t idx) {
+    if (idx >= PARAM_COUNT || !paramEEPROMRangeOK()) return false;
+
+    // Pastikan header EEPROM sudah valid
+    uint16_t magic = 0;
+    EEPROM.get(PARAM_EEPROM::ADDR_MAGIC, magic);
+    if (magic != PARAM_EEPROM::MAGIC) {
+        EEPROM.put(PARAM_EEPROM::ADDR_MAGIC, PARAM_EEPROM::MAGIC);
+        EEPROM.put(PARAM_EEPROM::ADDR_COUNT, PARAM_COUNT);
+    }
+
+    uint16_t addr = PARAM_EEPROM::ADDR_DATA + (idx * sizeof(float));
+    float val = clampParamValue(*g_params[idx].target,
+                                g_params[idx].min_val,
+                                g_params[idx].max_val);
+    *g_params[idx].target = val;
+    EEPROM.put(addr, val);
+    return true;
+}
+
 inline bool loadParamsFromEEPROM() {
     if (PARAM_COUNT == 0) {
         Serial.println("[PARAM] Load failed: initParams() not called");

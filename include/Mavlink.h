@@ -183,6 +183,7 @@ private:
     // --------------------------------------------------------
     void mavWrite(HardwareSerial& port, const mavlink_message_t& msg);
     void mavWriteUSB(Stream& port,      const mavlink_message_t& msg);
+    void writeToUsbGcs(const mavlink_message_t& msg);
     void mavSendAll(const mavlink_message_t& msg);
     void replyTarget(const mavlink_message_t& msg);   // Reply only to sender of current message
     void replyMission(const mavlink_message_t& msg);  // Reply strictly to the locked mission_port
@@ -297,8 +298,17 @@ void MavlinkHandler::mavWriteUSB(Stream& port, const mavlink_message_t& msg) {
     port.write(buf, len);
 }
 
-void MavlinkHandler::mavSendAll(const mavlink_message_t& msg) {
+void MavlinkHandler::writeToUsbGcs(const mavlink_message_t& msg) {
+#if defined(USB_DUAL_SERIAL) || defined(USB_TRIPLE_SERIAL)
+    mavWriteUSB(SerialUSB1, msg);
+#endif
+#if !HITL_ENABLED
     mavWriteUSB(Serial, msg);
+#endif
+}
+
+void MavlinkHandler::mavSendAll(const mavlink_message_t& msg) {
+    writeToUsbGcs(msg);
     mavWrite(Serial2, msg);   // Telemetry Radio / ELRS
     
     // Ke Raspberry Pi:
@@ -311,14 +321,14 @@ void MavlinkHandler::mavSendAll(const mavlink_message_t& msg) {
 
 void MavlinkHandler::replyTarget(const mavlink_message_t& msg) {
     // Send hanya ke port yang kirim pesan
-    if (current_port == PORT_USB) mavWriteUSB(Serial, msg);
+    if (current_port == PORT_USB) writeToUsbGcs(msg);
     else if (current_port == PORT_TLM) mavWrite(Serial2, msg);
     else if (current_port == PORT_RPI) mavWrite(Serial1, msg);
 }
 
 void MavlinkHandler::replyMission(const mavlink_message_t& msg) {
     // Send khusus ke port yang mengunci transaksi misi (tidak terpengaruh port lain)
-    if (mission_port == PORT_USB) mavWriteUSB(Serial, msg);
+    if (mission_port == PORT_USB) writeToUsbGcs(msg);
     else if (mission_port == PORT_TLM) mavWrite(Serial2, msg);
     else if (mission_port == PORT_RPI) mavWrite(Serial1, msg);
 }
@@ -470,14 +480,29 @@ void MavlinkHandler::printRCStatus() {
 //  RC (ID 70/65/35/109) akan otomatis diproses di sini juga
 // ============================================================
 void MavlinkHandler::handlePorts() {
-    // --- USB (GCS via Mission Planner / QGC) ---
-    while (Serial.available()) {
-        uint8_t c = Serial.read();
+#if defined(USB_DUAL_SERIAL) || defined(USB_TRIPLE_SERIAL)
+    // --- USB Port 2 (SerialUSB1): Mission Planner / QGC saat Dual Serial ---
+    while (SerialUSB1.available()) {
+        uint8_t c = SerialUSB1.read();
         if (mavlink_parse_char(MAVLINK_COMM_0, c, &rxmsg_usb, &st_usb)) {
+            current_port = PORT_USB;
             processAsFC(rxmsg_usb, PORT_USB);
             forwardToOthers(rxmsg_usb, PORT_USB);
         }
     }
+#endif
+
+#if !HITL_ENABLED
+    // --- USB Port 1 (Serial): GCS via USB utama jika tidak sedang mode HITL ---
+    while (Serial.available()) {
+        uint8_t c = Serial.read();
+        if (mavlink_parse_char(MAVLINK_COMM_0, c, &rxmsg_usb, &st_usb)) {
+            current_port = PORT_USB;
+            processAsFC(rxmsg_usb, PORT_USB);
+            forwardToOthers(rxmsg_usb, PORT_USB);
+        }
+    }
+#endif
 
     // --- Serial2: Telemetry Radio DAN ELRS RC ---
     //  ELRS dalam MAVLink mode mengirim RC_CHANNELS_OVERRIDE (ID 70)
@@ -796,6 +821,63 @@ void MavlinkHandler::handleCommandLong(const mavlink_message_t& msg) {
                 result = MAV_RESULT_ACCEPTED;
             } else {
                 result = MAV_RESULT_UNSUPPORTED;
+            }
+            break;
+        }
+
+        // ============================================================
+        //  MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN (Command ID 246)
+        //  param1: 1=Reboot Autopilot, 2=Shutdown, 3/201=Bootloader
+        //  param2: 1=Reboot Companion (RPi), 2=Shutdown Companion
+        // ============================================================
+        case MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN: {
+            int opt_ap   = (int)(cmd.param1 + 0.5f);
+            int opt_comp = (int)(cmd.param2 + 0.5f);
+
+            // Safety check: Jangan izinkan reboot saat wahana dalam status ARMED
+            if (arming && (opt_ap == 1 || opt_ap == 2 || opt_ap == 3 || opt_ap == 201)) {
+                result = MAV_RESULT_DENIED;
+                sendStatusText(MAV_SEVERITY_WARNING, "REBOOT DENIED: VEHICLE ARMED");
+                break;
+            }
+
+            // 1. Forward ke Companion Computer (Raspberry Pi di Serial1) jika diminta
+            if (opt_comp == 1) {
+                sendStatusText(MAV_SEVERITY_INFO, "REBOOTING COMPANION (RPI)...");
+                mavWrite(Serial1, msg);
+                result = MAV_RESULT_ACCEPTED;
+            } else if (opt_comp == 2) {
+                sendStatusText(MAV_SEVERITY_INFO, "SHUTTING DOWN COMPANION (RPI)...");
+                mavWrite(Serial1, msg);
+                result = MAV_RESULT_ACCEPTED;
+            }
+
+            // 2. Eksekusi Autopilot (Teensy 4.1)
+            if (opt_ap == 1) {
+                // Reboot normal Autopilot
+                result = MAV_RESULT_ACCEPTED;
+                sendStatusText(MAV_SEVERITY_INFO, "REBOOTING AUTOPILOT...");
+                sendCommandAck(cmd.command, result);
+                delay(200); // Berikan jeda agar paket ACK & status text terkirim sempurna ke GCS
+                SCB_AIRCR = 0x05FA0004; // Hardware system reset Cortex-M7
+                while (1) { __asm__ volatile("wfi"); }
+            } else if (opt_ap == 3 || opt_ap == 201) {
+                // Reboot ke Bootloader (HalfKay / Upload mode)
+                result = MAV_RESULT_ACCEPTED;
+                sendStatusText(MAV_SEVERITY_INFO, "REBOOTING TO BOOTLOADER...");
+                sendCommandAck(cmd.command, result);
+                delay(200);
+                _reboot_Teensyduino_();
+            } else if (opt_ap == 2) {
+                // Shutdown Autopilot (Disarm & standby)
+                arming = false;
+                result = MAV_RESULT_ACCEPTED;
+                sendStatusText(MAV_SEVERITY_INFO, "AUTOPILOT SHUTDOWN (STANDBY)");
+            } else if (opt_comp == 1 || opt_comp == 2) {
+                result = MAV_RESULT_ACCEPTED;
+            } else {
+                result = MAV_RESULT_UNSUPPORTED;
+                sendStatusText(MAV_SEVERITY_WARNING, "REBOOT/SHUTDOWN OPTION NOT SUPPORTED");
             }
             break;
         }
@@ -1626,7 +1708,10 @@ void MavlinkHandler::handleParamRequestRead(const mavlink_message_t& msg) {
     if (req.param_index >= 0) {
         idx = (req.param_index < PARAM_COUNT) ? req.param_index : -1;
     } else {
-        idx = findParam(req.param_id);
+        char clean_name[17] = {0};
+        memcpy(clean_name, req.param_id, 16);
+        clean_name[16] = '\0';
+        idx = findParam(clean_name);
     }
 
     if (idx >= 0) {
@@ -1645,21 +1730,27 @@ void MavlinkHandler::handleParamSet(const mavlink_message_t& msg) {
 
     if (ps.target_system != SYSTEM_ID && ps.target_system != 0) return;
 
-    int idx = findParam(ps.param_id);
+    // Sanitasi string nama parameter (maks 16 char MAVLink)
+    char clean_name[17] = {0};
+    memcpy(clean_name, ps.param_id, 16);
+    clean_name[16] = '\0';
+
+    int idx = findParam(clean_name);
     if (idx < 0) {
         sendStatusText(MAV_SEVERITY_WARNING, "PARAM SET: NOT FOUND");
         return;
     }
 
-    // Clamp ke batas, langsung tulis ke fw_gain via pointer
+    // Clamp ke batas, langsung tulis ke target via pointer
     float val = constrain(ps.param_value,
                           g_params[idx].min_val,
                           g_params[idx].max_val);
     *g_params[idx].target = val;
 
-    saveParamsToEEPROM();
+    // Simpan cepat HANYA parameter ini ke EEPROM (non-blocking, ~2 mikrodetik)
+    saveSingleParamToEEPROM((uint16_t)idx);
 
-    // Wajib echo balik PARAM_VALUE setelah SET
+    // Wajib echo balik PARAM_VALUE setelah SET agar Mission Planner tidak timeout
     sendParamValue((uint16_t)idx);
 
     char buf[50];
