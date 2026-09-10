@@ -96,15 +96,15 @@ void calc_nav_roll()
 /** calculate pitch from speed and height controller in auto mode */
 void calc_nav_pitch()
 {
-    float demanded_pitch;
-    if (get_pitch_demand() < -20){
-        demanded_pitch = 0;
-    }
-    else {
-        demanded_pitch = get_pitch_demand();
-    }
+    // float demanded_pitch;
+    // if (get_pitch_demand() < -20){
+    //     demanded_pitch = 0;
+    // }
+    // else {
+    //     demanded_pitch = get_pitch_demand();
+    // }
     
-    nav_pitch_deg = constrain(demanded_pitch, pitch_limit_min, pitch_limit_max);
+    nav_pitch_deg = constrain(get_pitch_demand(), pitch_limit_min, pitch_limit_max);
 }
 
 void update_load_factor(void)
@@ -136,6 +136,9 @@ void update_load_factor(void)
         }
         nav_roll_deg = constrain(nav_roll_deg, -roll_limit, roll_limit);
         roll_limit_cd = MIN(roll_limit_cd, roll_limit);
+    }
+    if (isnan(aerodynamic_load_factor) || isinf(aerodynamic_load_factor) || aerodynamic_load_factor < 1.0f) {
+        aerodynamic_load_factor = 1.0f;
     }
 }
 

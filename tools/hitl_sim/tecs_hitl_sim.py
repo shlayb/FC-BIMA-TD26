@@ -259,6 +259,8 @@ class HITLSimRunner:
         self.curr_target_alt = 50.0
         self.curr_active_wp = 1
         self.curr_ste_err = 0.0
+        self.mode_str = "AUTO"
+        self.is_armed = False
 
         # Stats
         self.rx_count = 0
@@ -456,7 +458,8 @@ class HITLSimRunner:
             # Debug print setiap 2 detik (100 iterations)
             if self.tx_count % 50 == 0:
                 lat, lon = self.physics.get_lat_lon()
-                mode_tag = f"MODE={self.mode_str}" + (f" (WP {self.curr_active_wp})" if self.mode_str == "AUTO" else "")
+                mode_str = getattr(self, 'mode_str', 'AUTO')
+                mode_tag = f"MODE={mode_str}" + (f" (WP {self.curr_active_wp})" if mode_str == "AUTO" else "")
                 print(f"[SIM t={t_curr:5.1f}s] "
                       f"{mode_tag:<18} "
                       f"x={self.physics.x:6.1f}m N  y={self.physics.y:6.1f}m E  "
@@ -624,8 +627,9 @@ def main():
     print(f"  Airspeed Mode      : {'Pitot Tube Enabled' if args.pitot else 'FULL GROUNDSPEED (Non-Airspeed TECS)'}")
     print(f"  Simulated Headwind : {args.wind} m/s")
     print("=" * 70)
-    print("  [INFO] Pastikan firmware Teensy sudah di-compile dengan:")
-    print("         #define HITL_ENABLED 1  (di include/FW_config.h)")
+    print("  [INFO] Teensy Dual Serial Aktif:")
+    print(f"         • Simulator HITL  : {port}")
+    print("         • Mission Planner : Port serial kedua (misal /dev/ttyACM1 atau COM4)")
     print("=" * 70)
 
     runner = HITLSimRunner(port=port, baud=args.baud, enable_pitot=args.pitot)

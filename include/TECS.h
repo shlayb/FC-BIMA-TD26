@@ -31,13 +31,6 @@
  *    of easy to measure aircraft performance data
  */
 
-    float tes;
-
-    // Debug flag - set to true to enable TECS debugging via Serial2
-    // Default: false to avoid Serial2 overhead during flight
-    bool TECS_DEBUG = false;
-    uint32_t _last_debug_ms = 0;
-
     // Last time update_50Hz was called
     uint64_t _update_50hz_last_usec;
 
@@ -50,17 +43,17 @@
     // TECS tuning parameters
     float _hgtCompFiltOmega   = 5.0f;//3.5f;
     float _spdCompFiltOmega   = 2.0f;
-    float _maxClimbRate       = 4.5f;
-    float _minSinkRate        = 1.0f;
-    float _maxSinkRate        = 3.0f; // Dibatasi 3.0 m/s agar tidak diving tajam
-    float _timeConst          = 4.5f; // Naikkan time constant (standar Pixhawk 4.0-5.0s) agar level-off halus dan tidak bablas
+    float _maxClimbRate       = 5.0f;
+    float _minSinkRate        = 2.0f;
+    float _maxSinkRate        = 3.0f;
+    float _timeConst          = 3.0f;//3.275f; 
     float _landTimeConst      = 2.0f;
-    float _ptchDamp           = 0.25f; // Sesuai standar Pixhawk (0.0 - 0.3) agar aktif meredam saat flare/level-off
+    float _ptchDamp           = 0.15f; // Pitch damping untuk meredam osilasi ketinggian (ArduPilot default 0.0-0.1)
     float _land_pitch_damp    = 0;
     float _landDamp           = 0.5f;
-    float _thrDamp            = 0.45f; // Turunkan (standar Pixhawk 0.5) agar throttle tidak kaget/hunting
+    float _thrDamp            = 0.5f;
     float _land_throttle_damp = 0;
-    float _integGain          = 0.10f; // Turunkan (standar Pixhawk 0.1) agar tidak windup berlebih
+    float _integGain          = 0.02f; // Integrator gain diperhalus untuk mencegah windup/overshoot
     float _integGain_takeoff  = 0;
     float _integGain_land     = 0;
     float _vertAccLim         = 7.0f;
@@ -285,7 +278,7 @@
 
     // Rate of change of velocity along X body axis in m/s^2
     float get_VXdot(void) {
-        return _vel_dot;
+        return _vel_dot;    
     }
 
     // return current target airspeed
@@ -345,6 +338,12 @@
     float get_tecs_max_throttle(){
         return tecs_max_throttle;
     }
+    void set_tecs_cruise_throttle(float value){
+        tecs_cruise_throttle = value;
+    }
+    float get_tecs_cruise_throttle(){
+        return tecs_cruise_throttle;
+    }
 
 float timeConstant(void)
 {    
@@ -375,7 +374,7 @@ void _update_speed(float DT)
         _vel_dot_lpf = _vel_dot_lpf * (1.0f - alpha) + _vel_dot * alpha;
     }
 
-    bool use_airspeed = _use_synthetic_airspeed_once || ahrs.is_airspeed_sensor_enabled || ahrs.haveGPS();
+    bool use_airspeed = _use_synthetic_airspeed_once || ahrs.is_airspeed_sensor_enabled;
 
     // Convert equivalent airspeeds to true airspeeds and harmonise limits
 
@@ -410,14 +409,14 @@ void _update_speed(float DT)
     if (_TASmax < _TASmin) {
         _TASmax = _TASmin;
     }
-
-    // Get measured airspeed (from Pitot sensor or GPS groundspeed in Full Groundspeed mode)
-    if (ahrs.is_airspeed_sensor_enabled) {
-        _EAS = arspd.v_ms;
-    } else if (ahrs.haveGPS()) {
-        _EAS = MAX(ahrs.groundspeed, 3.0f);
-    } else {
-        _EAS = constrain(AIRSPEED_CRUISE, MIN_AIRSPEED, MAX_AIRSPEED);
+    // Get measured airspeed or default to trim speed and constrain to range between min and max if
+    // airspeed sensor data cannot be used
+    if (!ahrs.is_airspeed_sensor_enabled) {
+        // If no airspeed available use average of min and max
+        // _EAS = constrain(AIRSPEED_CRUISE, MIN_AIRSPEED, MAX_AIRSPEED);
+        float EAS2TAS_now = baro.getEAS2TAS();
+        float tas_estimate = constrain(arspd.v_ms, MIN_AIRSPEED, MAX_AIRSPEED);
+        _EAS = tas_estimate / MAX(EAS2TAS_now, 0.1f);   // hindari div by zero
     }
 
     // limit the airspeed to a minimum of 3 m/s
@@ -565,55 +564,33 @@ void _update_speed_demand(void)
 
 void _update_height_demand()
 {
-    // Apply 2 point moving average to demanded height
-    _hgt_dem = 0.5f * (_hgt_dem + _hgt_dem_in_old);
-    _hgt_dem_in_old = _hgt_dem;
+    float max_sink_rate = _maxSinkRate; 
 
-    float alt_diff = _hgt_dem - _hgt_dem_prev;
-    float dist_to_target = fabsf(alt_diff);
-
-    // Smooth deceleration / flare curve: v = sqrt(2 * a * d)
-    // Sinking / climbing rate slows down smoothly as it approaches target altitude
-    const float a_decel = 0.40f; // m/s^2 smooth deceleration
-    float sink_rate_limit  = fminf(_maxSinkRate,  fmaxf(0.35f, sqrtf(2.0f * a_decel * dist_to_target)));
-    float climb_rate_limit = fminf(_maxClimbRate, fmaxf(0.35f, sqrtf(2.0f * a_decel * dist_to_target)));
-
-    // Limit height rate of change with deceleration curve
-    if (alt_diff > (climb_rate_limit * _DT))
+    // Limit height rate of change per loop step using actual _DT
+    float max_climb_step = _maxClimbRate * _DT;
+    float max_sink_step  = max_sink_rate * _DT;
+    if ((_hgt_dem - _hgt_dem_prev) > max_climb_step)
     {
-        _hgt_dem = _hgt_dem_prev + climb_rate_limit * _DT;
+        _hgt_dem = _hgt_dem_prev + max_climb_step;
     }
-    else if (alt_diff < (-sink_rate_limit * _DT))
+    else if ((_hgt_dem - _hgt_dem_prev) < -max_sink_step)
     {
-        _hgt_dem = _hgt_dem_prev - sink_rate_limit * _DT;
+        _hgt_dem = _hgt_dem_prev - max_sink_step;
     }
     _hgt_dem_prev = _hgt_dem;
 
-    // Jika pesawat saat descent sudah mencapai target (height <= target),
-    // langsung sinkronkan state agar trajectory tidak terus meminta diving
-    if ((alt_diff < 0.0f) && (_height <= _hgt_dem + 0.5f)) {
-        _hgt_dem_prev = _hgt_dem;
-    }
+    // float alpha = constrain(_DT / (2.0f + _DT), 0.001f, 0.5f);
+    // _hgt_dem_adj = alpha * _hgt_dem + (1.0f - alpha) * _hgt_dem_adj_last;
+    _hgt_dem_adj = _hgt_dem;
 
-    // Apply first order lag to height demand (alpha = 0.10 agar tracking sigap tanpa lag berlebih)
-    float hgt_dem_adj_prev = _hgt_dem_adj_last;
-    _hgt_dem_adj = 0.10f * _hgt_dem + 0.90f * _hgt_dem_adj_last;
-    _hgt_dem_adj_last = _hgt_dem_adj;
-
-    if (_DT > 0.001f) {
-        _hgt_rate_dem = (_hgt_dem_adj - hgt_dem_adj_prev) / _DT;
+    hgt_dem_lag_filter_slew = 0;
+    if (_DT > 0.0001f) {
+        _hgt_rate_dem = (_hgt_dem_adj - _hgt_dem_adj_last) / _DT;
     } else {
         _hgt_rate_dem = 0.0f;
     }
-    _hgt_rate_dem = constrain(_hgt_rate_dem, -_maxSinkRate, _maxClimbRate);
-
-    // DEBUG: Altitude control values every 1000ms via Serial2
-    if (TECS_DEBUG && (millis() - _last_debug_ms > 1000)) {
-        char buf[100];
-        snprintf(buf, sizeof(buf), "[ALT] H:%.2f T:%.2f RD:%.2f", 
-                 _height, _hgt_dem_adj, _hgt_rate_dem);
-        Serial2.println(buf);
-    }
+    _hgt_rate_dem = constrain(_hgt_rate_dem, -max_sink_rate, _maxClimbRate);
+    _hgt_dem_adj_last = _hgt_dem_adj;
 }
 
 void _detect_underspeed(void)
@@ -650,9 +627,7 @@ void _detect_underspeed(void)
 
 void _update_energies(void){
     // Calculate specific energy demands
-    // Use filtered/rate-limited height demand (_hgt_dem_adj) instead of raw demand (_hgt_dem)
-    // This ensures energy calculations match the actual height demand being tracked
-    _SPE_dem = _hgt_dem_adj * GRAVITY_MSS;
+    _SPE_dem = _hgt_dem * GRAVITY_MSS;
     _SKE_dem = 0.5f * _TAS_dem_adj * _TAS_dem_adj;
 
     // Calculate specific energy rate demands and high pass filter demanded airspeed
@@ -764,7 +739,14 @@ void _update_throttle_without_airspeed(int16_t throttle_nudge)
 {
     // Calculate throttle demand by interpolating between pitch and throttle limits
     float nomThr;
-    nomThr = (tecs_cruise_throttle + throttle_nudge) * 0.01f;
+    //If landing and we don't have an airspeed sensor and we have a non-zero
+    //TECS_LAND_THR param then use it
+    nomThr = (TECS_CRUISE_THROTTLE + throttle_nudge) * 0.01f;
+
+    float speed_err = _TAS_dem_adj - _TAS_state;   // positif kalau kurang cepat dari target
+    float speed_corr = constrain(speed_err * 0.03f, -0.2f, 0.2f); // gain kecil, batasi ±15% throttle
+    nomThr = constrain(nomThr + speed_corr, _THRminf, _THRmaxf);
+    // --- akhir tambahan ---
 
     if (_pitch_dem > 0.0f && _PITCHmaxf > 0.0f)
     {
@@ -787,6 +769,20 @@ void _update_throttle_without_airspeed(int16_t throttle_nudge)
     float cosPhi = sqrtf((rotMat.a.y * rotMat.a.y) + (rotMat.b.y * rotMat.b.y));
     float STEdot_dem = _rollComp * (1.0f / constrain(cosPhi * cosPhi, 0.1f, 1.0f) - 1.0f);
     _throttle_dem = _throttle_dem + STEdot_dem / (_STEdot_max - _STEdot_min) * (_THRmaxf - _THRminf);
+
+    // Constrain throttle demand
+    _throttle_dem = constrain(_throttle_dem, _THRminf, _THRmaxf);
+
+    // Rate limit throttle demand using THR_SLEW_RATE
+    float THRminf_clipped_to_zero = constrain(_THRminf, 0.0f, _THRmaxf);
+    if (THR_SLEW_RATE != 0 && _DT > 0.0001f)
+    {
+        float thrRateIncr = _DT * (_THRmaxf - THRminf_clipped_to_zero) * THR_SLEW_RATE * 0.01f;
+        _throttle_dem = constrain(_throttle_dem,
+                                  _last_throttle_dem - thrRateIncr,
+                                  _last_throttle_dem + thrRateIncr);
+    }
+    _last_throttle_dem = _throttle_dem;
 }
 
 void _detect_bad_descent(void)
@@ -823,7 +819,7 @@ void _update_pitch(void)
     // A SKE_weighting of 2 provides 100% priority to speed control. This is used when an underspeed condition is detected. In this instance, if airspeed
     // rises above the demanded value, the pitch angle will be increased by the TECS controller.
     _SKE_weighting = constrain(_spdWeight, 0.0f, 2.0f);
-    if (!ahrs.is_airspeed_sensor_enabled && !_use_synthetic_airspeed_once) {
+    if (!ahrs.is_airspeed_sensor_enabled || _use_synthetic_airspeed) {
         _SKE_weighting = 0.0f;
     } 
 
@@ -878,7 +874,7 @@ void _update_pitch(void)
     // range in one step. This prevents single value glitches from
     // causing massive integrator changes. See Issue#4066
     float integSEB_range = integSEBdot_max - integSEBdot_min;
-    float integSEB_delta = constrain(SEBdot_error * _get_i_gain() * _DT, -integSEB_range*0.1f, integSEB_range*0.1f);
+    float integSEB_delta = constrain(SEBdot_error * _get_i_gain() * _DT, -integSEB_range*0.05f, integSEB_range*0.05f);
 
     // predict what pitch will be with uncontrained integration
     _pitch_dem_unc = (SEBdot_dem_total + _integSEBdot + integSEB_delta + _integKE) / gainInv;
@@ -886,29 +882,6 @@ void _update_pitch(void)
     // integrate SEB rate error and apply integrator state limits
     bool inhibit_integrator = ((_pitch_dem_unc > _PITCHmaxf) && integSEB_delta > 0.0f) ||
                                     ((_pitch_dem_unc < _PITCHminf) && integSEB_delta < 0.0f);
-    
-    // Additional anti-windup: prevent integrator windup when OVERSHOOTING target
-    // Handle both CLIMB overshoot (above target) and DESCENT overshoot (below target) + Capture anticipation
-    float alt_error_signed = _hgt_dem_adj - _height;  // positive = below target, negative = above target
-
-    // 1. Kasus Climb overshoot: pesawat sudah di atas target (>20cm), tapi masih minta nanjak
-    bool climb_overshoot   = (alt_error_signed < -0.2f && integSEB_delta > 0.0f);
-
-    // 2. Kasus Descent overshoot: pesawat sudah di bawah target (>20cm), tapi masih minta menukik
-    bool descent_overshoot = (alt_error_signed >  0.2f && integSEB_delta < 0.0f);
-
-    // 3. Proactive Altitude Capture: saat sudah dekat target (< 1.5m) dengan laju tinggi ke arah target,
-    // tahan penambahan integrator agar tidak terlambat ngerem
-    bool capture_climb   = (alt_error_signed < 0.0f && alt_error_signed > -1.5f && _climb_rate > 0.5f && integSEB_delta > 0.0f);
-    bool capture_descent = (alt_error_signed > 0.0f && alt_error_signed <  1.5f && _climb_rate < -0.5f && integSEB_delta < 0.0f);
-
-    if (climb_overshoot || descent_overshoot || capture_climb || capture_descent) {
-        inhibit_integrator = true;
-        if (TECS_DEBUG && (millis() - _last_debug_ms > 1000)) {
-            Serial2.println(climb_overshoot ? "[TECS] Inhibit CLIMB" : 
-                           (descent_overshoot ? "[TECS] Inhibit DESCENT" : "[TECS] Inhibit CAPTURE"));
-        }
-    }
     
     if (!inhibit_integrator) {
         _integSEBdot += integSEB_delta;
@@ -949,34 +922,29 @@ void _update_pitch(void)
 
 void _initialise_states(float hgt_afe)
 {
-    _integTHR_state = 0.0f;
-    _integSEB_state = 0.0f;
-    _integSEBdot = 0.0f;  // Reset pitch integrator
-    _integKE = 0.0f;      // Reset kinetic energy integrator
-    _last_throttle_dem = tecs_cruise_throttle * 0.01f;
-    _last_pitch_dem = imu.pitch;
-
-    // Ambil ketinggian aktual saat ini (up-positive) agar tidak pitch down dari 0m
-    float cur_hgt = (_height > 1.0f) ? _height : (baro.altitude > 1.0f ? baro.altitude : (hgt_afe > 1.0f ? hgt_afe : _hgt_dem));
-    _hgt_dem_adj_last = cur_hgt;
-    _hgt_dem_adj = _hgt_dem_adj_last;
-    _hgt_dem_prev = _hgt_dem_adj_last;
-    _hgt_dem_in_old = _hgt_dem_adj_last;
-    _TAS_dem_adj = _TAS_dem;
-    my_flags._flags.underspeed = false;
-    my_flags._flags.badDescent = false;
-    _DT = 0.02f;
-    
-    if (TECS_DEBUG) {
-        char buf[60];
-        snprintf(buf, sizeof(buf), "[TECS] INIT hgt:%.2fm", cur_hgt);
-        Serial2.println(buf);
+    // Initialise states and variables if DT > 1 second or in climbout
+    if (_DT > 1.0f)
+    {
+        _integTHR_state = 0.0f;
+        _integSEB_state = 0.0f;
+        _last_throttle_dem = THROTTLE_CRUISE * 0.01f;
+        _last_pitch_dem = imu.pitch;
+        _hgt_dem_adj_last = hgt_afe;
+        _hgt_dem_adj = _hgt_dem_adj_last;
+        _hgt_dem_prev = _hgt_dem_adj_last;
+        _hgt_dem_in_old = _hgt_dem_adj_last;
+        _TAS_dem_adj = _TAS_dem;
+        my_flags._flags.underspeed = false;
+        my_flags._flags.badDescent = false;
+        _DT = 0.2f; // when first starting TECS, use a
+        // small time constant
     }
 }
 
 void _update_STE_rate_lim(void)
 {
     // Calculate Specific Total Energy Rate Limits
+    // This is a trivial calculation at the moment but will get bigger once we start adding altitude effects
     _STEdot_max = _maxClimbRate * GRAVITY_MSS;
     _STEdot_min = -_minSinkRate * GRAVITY_MSS;
 }
@@ -989,42 +957,18 @@ void update_pitch_throttle( int32_t hgt_dem_cm,
 {
     // Calculate time in seconds since last update
     uint64_t now = micros();
-    bool is_first_call = (_update_pitch_throttle_last_usec == 0);
-    if (is_first_call) {
-        _DT = 0.02f;
-    } else {
-        _DT = (now - _update_pitch_throttle_last_usec) * 1.0e-6f;
-    }
+    _DT = (now - _update_pitch_throttle_last_usec) * 1.0e-6f;
     _update_pitch_throttle_last_usec = now;
-    _DT = constrain(_DT, 0.001f, 1.0f);
 
     // Convert inputs
-    _hgt_dem = hgt_dem_cm * 0.01f; // konversi ke meter
+    _hgt_dem = hgt_dem_cm * 0.01; // konversi ke meter
     _EAS_dem = EAS_dem_cm; // equivalent airspeed
-    
-    // Pastikan state TECS diinisialisasi pertama kali
-    static bool tecs_initialized = false;
-    if (!tecs_initialized || _DT > 1.0f || is_first_call) {
-        _initialise_states(hgt_afe);
-        tecs_initialized = true;
-    }
 
-    // MAVLink DEBUG: Print input values on first valid call
-    static bool first_call = true;
-    if (TECS_DEBUG && first_call && _DT < 1.0f) {
-        char buf[80];
-        snprintf(buf, sizeof(buf), "[TECS] TGT:%.2fcm CUR:%.2fm EAS:%.1fm/s", 
-                 (float)hgt_dem_cm, hgt_afe, EAS_dem_cm);
-        Serial2.println(buf);
-        first_call = false;
-    }
-
-    // Update load factor & speed estimate using a 2nd order complementary filter
-    _load_factor = load_factor;
+    // Update the speed estimate using a 2nd order complementary filter
     _update_speed(_DT);
 
-    _THRmaxf = tecs_max_throttle * 0.01f;
-    _THRminf = tecs_min_throttle * 0.01f;
+    _THRmaxf = tecs_max_throttle * 0.01f; // 0.85
+    _THRminf = tecs_min_throttle * 0.01f; // 0.30
 
     // min of 1% throttle range to prevent a numerical error
     _THRmaxf = MAX(_THRmaxf, _THRminf + 0.01);
@@ -1066,6 +1010,9 @@ void update_pitch_throttle( int32_t hgt_dem_cm,
     // don't allow max pitch to go below min pitch
     _PITCHmaxf = MAX(_PITCHmaxf, _PITCHminf);
 
+    // initialise selected states and variables if DT > 1 second or in climbout
+    _initialise_states(hgt_afe);
+
     // Calculate Specific Total Energy Rate Limits
     _update_STE_rate_lim();
 
@@ -1081,9 +1028,12 @@ void update_pitch_throttle( int32_t hgt_dem_cm,
     // Calculate specific energy quantitiues
     _update_energies();
 
-    // Calculate throttle demand - use closed loop energy controller if sensor is enabled,
-    // or if synthetic airspeed / GPS Groundspeed is available
-    if (ahrs.is_airspeed_sensor_enabled || _use_synthetic_airspeed_once || ahrs.haveGPS())
+    // Calculate throttle demand - use simple pitch to throttle if no
+    // airspeed sensor.
+    // Note that caller can demand the use of
+    // synthetic airspeed for one loop if needed. This is required
+    // during QuadPlane transition when pitch is constrained
+    if ((ahrs.is_airspeed_sensor_enabled && _use_synthetic_airspeed) || _use_synthetic_airspeed_once)
     {
         _update_throttle_with_airspeed();
         _use_synthetic_airspeed_once = false;
@@ -1098,15 +1048,6 @@ void update_pitch_throttle( int32_t hgt_dem_cm,
 
     // Calculate pitch demand
     _update_pitch(); // ngehasilin nilai pitch
-
-    // DEBUG: Pitch and integrator values every 1000ms via Serial2
-    if (TECS_DEBUG && (millis() - _last_debug_ms > 1000)) {
-        char buf[80];
-        snprintf(buf, sizeof(buf), "[PIT] P:%.1f IS:%.2f IK:%.2f T:%d%%", 
-                 _pitch_dem * 57.3f, _integSEBdot, _integKE, (int)(_throttle_dem * 100));
-        Serial2.println(buf);
-        _last_debug_ms = millis();
-    }
 }
 
 

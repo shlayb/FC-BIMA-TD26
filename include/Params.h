@@ -34,9 +34,11 @@ extern float MAX_AIRSPEED;
 extern float AIRSPEED_STALL;
 extern float rtl_altitude;
 
-// Loiter variables
+// Loiter & Mission variables
+extern float wp_radius;
 extern float loiter_mode_radius;
 extern float loiter_bank_limit;
+extern float mis_done_behave;
 
 // ============================================================
 //  Param dengan pointer langsung ke variabel aslinya
@@ -169,10 +171,12 @@ inline void initParams() {
     g_params[i++] = {"CH_MTR_11",       &SERVO_RUD_R,                          13.0f,   0.0f,  41.0f};
 
     // ============================================================
-    //  LOITER MODE PARAMETERS
+    //  WAYPOINT, LOITER & MISSION PARAMETERS (ArduPilot Standard)
     // ============================================================
-    g_params[i++] = {"FW_LOIT_RAD",    &loiter_mode_radius,                  50.0f,  20.0f, 500.0f};
-    g_params[i++] = {"FW_LOIT_BANK",   &loiter_bank_limit,                   35.0f,  15.0f,  60.0f};
+    g_params[i++] = {"WP_RADIUS",       &wp_radius,                           40.0f,    5.0f, 200.0f};
+    g_params[i++] = {"WP_LOITER_RAD",   &loiter_mode_radius,                  50.0f, -500.0f, 500.0f};
+    g_params[i++] = {"FW_LOIT_BANK",    &loiter_bank_limit,                   35.0f,   15.0f,  60.0f};
+    g_params[i++] = {"MIS_DONE_BEHAVE", &mis_done_behave,                      1.0f,    0.0f,   1.0f};
 
     PARAM_COUNT = i;
 }
@@ -260,6 +264,26 @@ inline void saveParamsToEEPROM() {
                   PARAM_COUNT,
                   PARAM_EEPROM::ADDR_DATA,
                   PARAM_EEPROM::ADDR_DATA + PARAM_COUNT * sizeof(float));
+}
+
+inline bool saveSingleParamToEEPROM(uint16_t idx) {
+    if (idx >= PARAM_COUNT || !paramEEPROMRangeOK()) return false;
+
+    // Pastikan header EEPROM sudah valid
+    uint16_t magic = 0;
+    EEPROM.get(PARAM_EEPROM::ADDR_MAGIC, magic);
+    if (magic != PARAM_EEPROM::MAGIC) {
+        EEPROM.put(PARAM_EEPROM::ADDR_MAGIC, PARAM_EEPROM::MAGIC);
+        EEPROM.put(PARAM_EEPROM::ADDR_COUNT, PARAM_COUNT);
+    }
+
+    uint16_t addr = PARAM_EEPROM::ADDR_DATA + (idx * sizeof(float));
+    float val = clampParamValue(*g_params[idx].target,
+                                g_params[idx].min_val,
+                                g_params[idx].max_val);
+    *g_params[idx].target = val;
+    EEPROM.put(addr, val);
+    return true;
 }
 
 inline bool loadParamsFromEEPROM() {

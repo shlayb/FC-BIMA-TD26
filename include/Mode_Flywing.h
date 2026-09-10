@@ -94,8 +94,6 @@ public:
   }
   void _update() override {
           if (!enterauto) {
-            ahrs.update_ahrs();
-            nav_gps();
             auto_throttle_mode = true;
             auto_navigation_mode = true;
             auto_loiter_mode = false;
@@ -108,14 +106,11 @@ public:
             // add_waypoint(latitude, longitude, 90);
             enterauto = true;  // Set flag menjadi true agar fungsi tidak dipanggil lagi
           }
-    ahrs.update_ahrs();
-    nav_gps(); 
     // test_fuzzy_roll(); 
     motor_loop(988, 988, 988, 988);
     mode_fbwa_plane = true;
     navigate();
-    update_speed_height();
-    update_alt();
+    update_tecs();
     flywingcontrol.flywing_control_auto(ch_roll, ch_pitch, ch_yaw, ch_throttle, imu.roll, imu.pitch, imu.yaw, imu.gyro_y, imu.gyro_x, imu.gyro_z);
     flywing_calcout();
     flywing_servos_out(servo_L, servo_R);

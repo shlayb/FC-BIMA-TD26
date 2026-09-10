@@ -188,10 +188,8 @@ void mavlink_print(void *pvParameters) {
     TickType_t xLastWake = xTaskGetTickCount();
     const TickType_t xPeriod = pdMS_TO_TICKS(MAVLINK_time);
     for (;;) {
-#if !HITL_ENABLED
         mavHandler.handlePorts();
         mavHandler.mavlinkTask();
-#endif
         // Kalau task overrun, reset xLastWake agar tidak catch-up
         if ((xTaskGetTickCount() - xLastWake) >= xPeriod) {
             xLastWake = xTaskGetTickCount();  // ← reset, skip catch-up
@@ -349,6 +347,9 @@ void setup() {
  
     // --- Serial ---
     SERIAL_USB.begin(115200);
+#if defined(USB_DUAL_SERIAL) || defined(USB_TRIPLE_SERIAL)
+    SerialUSB1.begin(115200);
+#endif
     SERIAL_UART.begin(57600);
     SERIAL_UART.addMemoryForRead(dma_rx2,  sizeof(dma_rx2));
     SERIAL_UART.addMemoryForWrite(dma_tx2, sizeof(dma_tx2));
@@ -380,7 +381,7 @@ void setup() {
     pinMode(30, OUTPUT);
  
     // --- Init hardware ---
-    buzzer.initWithMusic();
+    buzzer.init();
     init_actuator();
 #if !HITL_ENABLED
     ahrs.init_ahrs();
@@ -389,10 +390,9 @@ void setup() {
     arspd.initAirspeed();  // Init I2C airspeed sensor
 #endif
     setup_fuzzy_roll();
-    buzzer.init();
- 
+
     if (CALIBRATE_MOTORS && !HITL_ENABLED) calibrateMotor();
- 
+
     // --- Buat mutex SEBELUM task dibuat ---
     xIMUMutex    = xSemaphoreCreateMutex();
     xAHRSMutex   = xSemaphoreCreateMutex();
@@ -413,7 +413,8 @@ void setup() {
     // Mode HITL: Jalankan Task_HITL untuk komunikasi serial cepat dengan simulator
     xTaskCreate(hitlTask,     "HITL",    4096, NULL,  6,  &Task_HITL);     // 200 Hz
     xTaskCreate(controlThd,   "Control", 8192, NULL,  5,  &Task_Control);  // 200 Hz — logic kompleks
-    // xTaskCreate(buzzerTask,   "Buzzer",  2048, NULL,  3,  &Task_Buzzer);   // 100 Hz
+    xTaskCreate(mavlink_print,"Mavlink", 8192, NULL,  5,  &Task_Mavlink); // 100 Hz real-time
+    xTaskCreate(buzzerTask,   "Buzzer",  2048, NULL,  4,  &Task_Buzzer);   // 100 Hz
 #else
     // Mode Terbang Nyata
     //                 fungsi          nama        stack  param  prio           handle
@@ -421,13 +422,13 @@ void setup() {
     xTaskCreate(controlThd,   "Control", 8192, NULL,  5,  &Task_Control); // 200 Hz — logic kompleks
     xTaskCreate(mavlink_print,"Mavlink", 8192, NULL,  5,  &Task_Mavlink); // 100 Hz real-time
     xTaskCreate(radio,        "Radio",   4096, NULL,  5,  &Task_Radio);   // 100 Hz
-    xTaskCreate(GPS,          "GPS",     4096, NULL,  4,  &Task_GPS);     // 100 Hz — string parsing
+    xTaskCreate(buzzerTask,   "Buzzer",  2048, NULL,  4,  &Task_Buzzer);  // 100 Hz — prioritas tinggi agar audio bebas jitter/delay
+    xTaskCreate(GPS,          "GPS",     4096, NULL,  3,  &Task_GPS);     // 100 Hz — UBX NAV-PVT parsing
     xTaskCreate(Compass_task, "Compass", 2048, NULL,  3,  &Task_Compass); //  20 Hz — IST8310 GPS M10
     xTaskCreate(updateBARO,   "BARO",    2048, NULL,  3,  &Task_BARO);    // 100 Hz
     // xTaskCreate(fwRoll,       "FWRoll",  4096, NULL,  3,  &Task_FWRoll);  // 50 Hz
     xTaskCreate(airspeed,     "Airspeed",2048, NULL,  3,  &Task_Airspeed);// 20 Hz
     // xTaskCreate(voltage,      "Voltage", 2048, NULL,  2,  &Task_Voltage); // 10 Hz
-    xTaskCreate(buzzerTask,   "Buzzer",  2048, NULL,  3,  &Task_Buzzer);  // 100 Hz
    //  xTaskCreate(Print_task,   "Print",   4096, NULL,  2,  &Task_Print);   // 20 Hz — terendah
     // xTaskCreate(Print_To_Raspi,"Raspi", 4096, NULL,  1,  &Task_Raspi);
     // xTaskCreate(Print_telem,   "Telem", 4096, NULL,  1,  &Task_Telem);

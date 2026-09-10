@@ -48,6 +48,8 @@
 extern Locations waypoint[100];
 extern int       wp_sum;
 extern Airspeed  arspd;
+void init_auto();
+void set_next_WP(struct Locations &loc);
 
 // ============================================================
 //  RC CHANNEL VARIABLES — Hasil parsing ELRS RC
@@ -101,6 +103,8 @@ static inline bool isMissionMessage(uint32_t msgid) {
         case MAVLINK_MSG_ID_MISSION_REQUEST_LIST:
         case MAVLINK_MSG_ID_MISSION_ACK:
         case MAVLINK_MSG_ID_MISSION_CLEAR_ALL:
+        case MAVLINK_MSG_ID_MISSION_SET_CURRENT:
+        case MAVLINK_MSG_ID_MISSION_CURRENT:
             return true;
         default:
             return false;
@@ -167,25 +171,29 @@ private:
   mavlink_message_t rxmsg_usb, rxmsg_tlm, rxmsg_rpi;
 
     // --- Mission state ---
-    MissionState mission_state      = MISSION_IDLE;
-    uint16_t     expected_count     = 0;
-    uint16_t     current_upload_seq = 0;
-    PortId       current_port       = PORT_USB;  // Track which port sent current message
+    MissionState  mission_state       = MISSION_IDLE;
+    unsigned long lastMissionActivity = 0;
+    uint16_t      expected_count      = 0;
+    uint16_t      current_upload_seq  = 0;
+    PortId        current_port        = PORT_USB;  // Track which port sent current message
+    PortId        mission_port        = PORT_USB;  // Dedicated port performing active mission transfer
+    uint8_t       mission_target_sys  = 255;
+    uint8_t       mission_target_comp = 0;
 
     // --------------------------------------------------------
     //  PRIVATE: Output helpers
     // --------------------------------------------------------
     void mavWrite(HardwareSerial& port, const mavlink_message_t& msg);
     void mavWriteUSB(Stream& port,      const mavlink_message_t& msg);
+    void writeToUsbGcs(const mavlink_message_t& msg);
     void mavSendAll(const mavlink_message_t& msg);
-    void replyTarget(const mavlink_message_t& msg);  // Reply only to sender
+    void replyTarget(const mavlink_message_t& msg);   // Reply only to sender of current message
+    void replyMission(const mavlink_message_t& msg);  // Reply strictly to the locked mission_port
 
     // --------------------------------------------------------
     //  PRIVATE: Telemetry senders
     // --------------------------------------------------------
     void sendCommandAck(uint16_t command, uint8_t result);
-    void sendStatusText(uint8_t severity, const char* text);
-    void sendHeartbeat();
     void sendAlert(const char* txt);
     void sendAltitude(float altitude);
     void sendAttitude(float roll_rad, float pitch_rad, float yaw_rad);
@@ -206,6 +214,8 @@ private:
     void sendServoOutputRaw();
     void sendRcChannelsRaw();
     void sendMissionCountToRPI();  // Kirim total WP ke RPI secara berkala
+    void sendHomePosition();
+    void sendAutopilotVersion();
 
     uint8_t  getBaseMode()   const;
     uint32_t getCustomMode() const;
@@ -222,6 +232,7 @@ private:
     void handleMissionItemInt(const mavlink_message_t& msg);
     void handleMissionItem(const mavlink_message_t& msg);
     void handleMissionClearAll(const mavlink_message_t& msg);
+    void handleMissionSetCurrent(const mavlink_message_t& msg);
     void handleSetPositionTargetLocalNed(const mavlink_message_t& msg);
     void handleSetPositionTargetGlobalInt(const mavlink_message_t& msg);
     void processAsFC(const mavlink_message_t& msg, PortId from);
@@ -256,6 +267,8 @@ public:
     void mavlinkTask();              // Periodic telemetry sender
     void handlePorts();              // Parse incoming bytes dari semua port
 
+    void sendStatusText(uint8_t severity, const char* text);
+    void sendHeartbeat();
     void sendCustomTextToGCS(const char* text);
     void notifyWaypointReached(uint16_t seq);
 
@@ -287,8 +300,17 @@ void MavlinkHandler::mavWriteUSB(Stream& port, const mavlink_message_t& msg) {
     port.write(buf, len);
 }
 
-void MavlinkHandler::mavSendAll(const mavlink_message_t& msg) {
+void MavlinkHandler::writeToUsbGcs(const mavlink_message_t& msg) {
+#if defined(USB_DUAL_SERIAL) || defined(USB_TRIPLE_SERIAL)
+    mavWriteUSB(SerialUSB1, msg);
+#endif
+#if !HITL_ENABLED
     mavWriteUSB(Serial, msg);
+#endif
+}
+
+void MavlinkHandler::mavSendAll(const mavlink_message_t& msg) {
+    writeToUsbGcs(msg);
     mavWrite(Serial2, msg);   // Telemetry Radio / ELRS
     
     // Ke Raspberry Pi:
@@ -301,9 +323,16 @@ void MavlinkHandler::mavSendAll(const mavlink_message_t& msg) {
 
 void MavlinkHandler::replyTarget(const mavlink_message_t& msg) {
     // Send hanya ke port yang kirim pesan
-    if (current_port == PORT_USB) mavWriteUSB(Serial, msg);
+    if (current_port == PORT_USB) writeToUsbGcs(msg);
     else if (current_port == PORT_TLM) mavWrite(Serial2, msg);
     else if (current_port == PORT_RPI) mavWrite(Serial1, msg);
+}
+
+void MavlinkHandler::replyMission(const mavlink_message_t& msg) {
+    // Send khusus ke port yang mengunci transaksi misi (tidak terpengaruh port lain)
+    if (mission_port == PORT_USB) writeToUsbGcs(msg);
+    else if (mission_port == PORT_TLM) mavWrite(Serial2, msg);
+    else if (mission_port == PORT_RPI) mavWrite(Serial1, msg);
 }
 
 // ============================================================
@@ -325,7 +354,13 @@ void MavlinkHandler::applyRcToGlobals(uint16_t c1, uint16_t c2, uint16_t c3,
     apply(ch_throttle, c3);
     apply(ch_yaw,      c4);
     apply(ch5,         c5);
-    arming = ch5 > 1500 ? 1 : 0; // Contoh: channel 5 sebagai switch arming
+    // Edge detection switch arming agar tidak menimpa perintah arming dari Mission Planner / GCS
+    static bool last_mav_rc_arm_switch = false;
+    bool mav_rc_arm_switch = (ch5 > 1500);
+    if (mav_rc_arm_switch != last_mav_rc_arm_switch) {
+        arming = mav_rc_arm_switch;
+        last_mav_rc_arm_switch = mav_rc_arm_switch;
+    }
     apply(ch_mode,         c6);
     apply(ch_mode_backup,         c7);
 
@@ -447,14 +482,29 @@ void MavlinkHandler::printRCStatus() {
 //  RC (ID 70/65/35/109) akan otomatis diproses di sini juga
 // ============================================================
 void MavlinkHandler::handlePorts() {
-    // --- USB (GCS via Mission Planner / QGC) ---
-    while (Serial.available()) {
-        uint8_t c = Serial.read();
+#if defined(USB_DUAL_SERIAL) || defined(USB_TRIPLE_SERIAL)
+    // --- USB Port 2 (SerialUSB1): Mission Planner / QGC saat Dual Serial ---
+    while (SerialUSB1.available()) {
+        uint8_t c = SerialUSB1.read();
         if (mavlink_parse_char(MAVLINK_COMM_0, c, &rxmsg_usb, &st_usb)) {
+            current_port = PORT_USB;
             processAsFC(rxmsg_usb, PORT_USB);
             forwardToOthers(rxmsg_usb, PORT_USB);
         }
     }
+#endif
+
+#if !HITL_ENABLED
+    // --- USB Port 1 (Serial): GCS via USB utama jika tidak sedang mode HITL ---
+    while (Serial.available()) {
+        uint8_t c = Serial.read();
+        if (mavlink_parse_char(MAVLINK_COMM_0, c, &rxmsg_usb, &st_usb)) {
+            current_port = PORT_USB;
+            processAsFC(rxmsg_usb, PORT_USB);
+            forwardToOthers(rxmsg_usb, PORT_USB);
+        }
+    }
+#endif
 
     // --- Serial2: Telemetry Radio DAN ELRS RC ---
     //  ELRS dalam MAVLink mode mengirim RC_CHANNELS_OVERRIDE (ID 70)
@@ -497,6 +547,7 @@ void MavlinkHandler::processAsFC(const mavlink_message_t& msg, PortId from) {
         case MAVLINK_MSG_ID_MISSION_ITEM_INT:      handleMissionItemInt(msg);      break;
         case MAVLINK_MSG_ID_MISSION_ITEM:          handleMissionItem(msg);         break;
         case MAVLINK_MSG_ID_MISSION_CLEAR_ALL:     handleMissionClearAll(msg);     break;
+        case MAVLINK_MSG_ID_MISSION_SET_CURRENT:   handleMissionSetCurrent(msg);   break;
         case MAVLINK_MSG_ID_PARAM_REQUEST_LIST: handleParamRequestList(msg); break;
         case MAVLINK_MSG_ID_PARAM_REQUEST_READ: handleParamRequestRead(msg); break;
         case MAVLINK_MSG_ID_PARAM_SET:          handleParamSet(msg);         break;
@@ -518,6 +569,7 @@ void MavlinkHandler::forwardToOthers(const mavlink_message_t& msg, PortId from) 
         case MAVLINK_MSG_ID_MISSION_REQUEST_LIST:
         case MAVLINK_MSG_ID_MISSION_ACK:
         case MAVLINK_MSG_ID_MISSION_CLEAR_ALL:
+        case MAVLINK_MSG_ID_MISSION_SET_CURRENT:
         case MAVLINK_MSG_ID_PARAM_REQUEST_LIST:
         case MAVLINK_MSG_ID_PARAM_REQUEST_READ:
         case MAVLINK_MSG_ID_PARAM_SET:
@@ -583,21 +635,24 @@ void MavlinkHandler::handleCommandLong(const mavlink_message_t& msg) {
         case MAV_CMD_COMPONENT_ARM_DISARM: {
             float arm_value = cmd.param1;
             float force     = cmd.param2;
-            Serial.printf("ARM REQ: arm=%.1f, force=%.1f\n", arm_value, force);
+            bool is_force   = (force == 21196.0f || force >= 1.0f);
+            Serial.printf("ARM REQ: arm=%.1f, force=%.1f (is_force=%d)\n", arm_value, force, is_force);
 
             if (arm_value == 1.0f) {
-                if (gepees.getStatus() < 2 && force != 21196.0f) {
+                if (gepees.getStatus() < 2 && !is_force) {
                     result = MAV_RESULT_DENIED;
-                    sendStatusText(MAV_SEVERITY_WARNING, "ARM DENIED: NO GPS FIX");
+                    sendStatusText(MAV_SEVERITY_WARNING, "ARM DENIED: NO GPS FIX (Use Force Arm in Actions tab)");
                 } else {
                     arming = true;
                     result = MAV_RESULT_ACCEPTED;
-                    sendStatusText(MAV_SEVERITY_INFO, "ARMED");
+                    sendStatusText(MAV_SEVERITY_INFO, is_force ? "ARMED (FORCE)" : "ARMED");
+                    sendHeartbeat(); // Langsung sync status ARMED ke GCS
                 }
             } else if (arm_value == 0.0f) {
                 arming = false;
                 result = MAV_RESULT_ACCEPTED;
                 sendStatusText(MAV_SEVERITY_INFO, "DISARMED");
+                sendHeartbeat();
             }
             break;
         }
@@ -653,6 +708,46 @@ void MavlinkHandler::handleCommandLong(const mavlink_message_t& msg) {
                      "DEBUG SET_MODE: custom_mode_in=%lu, new_mode=%d, current=(int)%d, mode_name=%s",
                      custom_mode, new_mode, (int)current, mode_name);
             sendStatusText(MAV_SEVERITY_INFO, debug_mode);
+            break;
+        }
+
+        case MAV_CMD_MISSION_START: {
+            uint16_t first_item = (uint16_t)cmd.param1;
+            if (first_item == 0) first_item = 1;
+            if (first_item < wp_sum) {
+                flag_wp = first_item;
+            } else {
+                flag_wp = 1;
+            }
+
+            if (flag_wp < wp_sum) {
+                target_altitude.amsl_cm = waypoint[flag_wp].alt;
+                set_next_WP(waypoint[flag_wp]);
+            }
+
+            mode_now = 3;
+            current  = ModeId::AUTO;
+            active_mode = ModeId::AUTO;
+            modes.setMode(ModeId::AUTO);
+            init_auto();
+            auto_navigation_mode = true;
+            auto_state.next_wp_crosstrack = false;
+
+            result = MAV_RESULT_ACCEPTED;
+            sendStatusText(MAV_SEVERITY_INFO, "MISSION START TRIGGERED");
+
+            // Immediate Heartbeat sync
+            mavlink_message_t hb_msg;
+            uint8_t system_status = arming ? MAV_STATE_ACTIVE : MAV_STATE_STANDBY;
+            uint8_t base_mode     = getBaseMode();
+            if (arming) base_mode |= MAV_MODE_FLAG_SAFETY_ARMED;
+            uint32_t custom_mode_out = getCustomMode();
+            mavlink_msg_heartbeat_pack(SYSTEM_ID, COMPONENT_ID, &hb_msg,
+                                       MAV_TYPE_FIXED_WING,
+                                       MAV_AUTOPILOT_ARDUPILOTMEGA,
+                                       base_mode, custom_mode_out, system_status);
+            mavSendAll(hb_msg);
+            lastHb = millis();
             break;
         }
 
@@ -712,6 +807,83 @@ void MavlinkHandler::handleCommandLong(const mavlink_message_t& msg) {
             break;
         }
 
+        case MAV_CMD_GET_HOME_POSITION: {
+            sendHomePosition();
+            result = MAV_RESULT_ACCEPTED;
+            break;
+        }
+
+        case MAV_CMD_REQUEST_MESSAGE: {
+            uint16_t req_msg_id = (uint16_t)(cmd.param1 + 0.5f);
+            if (req_msg_id == MAVLINK_MSG_ID_HOME_POSITION) {
+                sendHomePosition();
+                result = MAV_RESULT_ACCEPTED;
+            } else if (req_msg_id == MAVLINK_MSG_ID_AUTOPILOT_VERSION) {
+                sendAutopilotVersion();
+                result = MAV_RESULT_ACCEPTED;
+            } else {
+                result = MAV_RESULT_UNSUPPORTED;
+            }
+            break;
+        }
+
+        // ============================================================
+        //  MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN (Command ID 246)
+        //  param1: 1=Reboot Autopilot, 2=Shutdown, 3/201=Bootloader
+        //  param2: 1=Reboot Companion (RPi), 2=Shutdown Companion
+        // ============================================================
+        case MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN: {
+            int opt_ap   = (int)(cmd.param1 + 0.5f);
+            int opt_comp = (int)(cmd.param2 + 0.5f);
+
+            // Safety check: Jangan izinkan reboot saat wahana dalam status ARMED
+            if (arming && (opt_ap == 1 || opt_ap == 2 || opt_ap == 3 || opt_ap == 201)) {
+                result = MAV_RESULT_DENIED;
+                sendStatusText(MAV_SEVERITY_WARNING, "REBOOT DENIED: VEHICLE ARMED");
+                break;
+            }
+
+            // 1. Forward ke Companion Computer (Raspberry Pi di Serial1) jika diminta
+            if (opt_comp == 1) {
+                sendStatusText(MAV_SEVERITY_INFO, "REBOOTING COMPANION (RPI)...");
+                mavWrite(Serial1, msg);
+                result = MAV_RESULT_ACCEPTED;
+            } else if (opt_comp == 2) {
+                sendStatusText(MAV_SEVERITY_INFO, "SHUTTING DOWN COMPANION (RPI)...");
+                mavWrite(Serial1, msg);
+                result = MAV_RESULT_ACCEPTED;
+            }
+
+            // 2. Eksekusi Autopilot (Teensy 4.1)
+            if (opt_ap == 1) {
+                // Reboot normal Autopilot
+                result = MAV_RESULT_ACCEPTED;
+                sendStatusText(MAV_SEVERITY_INFO, "REBOOTING AUTOPILOT...");
+                sendCommandAck(cmd.command, result);
+                delay(200); // Berikan jeda agar paket ACK & status text terkirim sempurna ke GCS
+                SCB_AIRCR = 0x05FA0004; // Hardware system reset Cortex-M7
+                while (1) { __asm__ volatile("wfi"); }
+            } else if (opt_ap == 3 || opt_ap == 201) {
+                // Reboot ke Bootloader (HalfKay / Upload mode)
+                result = MAV_RESULT_ACCEPTED;
+                sendStatusText(MAV_SEVERITY_INFO, "REBOOTING TO BOOTLOADER...");
+                sendCommandAck(cmd.command, result);
+                delay(200);
+                _reboot_Teensyduino_();
+            } else if (opt_ap == 2) {
+                // Shutdown Autopilot (Disarm & standby)
+                arming = false;
+                result = MAV_RESULT_ACCEPTED;
+                sendStatusText(MAV_SEVERITY_INFO, "AUTOPILOT SHUTDOWN (STANDBY)");
+            } else if (opt_comp == 1 || opt_comp == 2) {
+                result = MAV_RESULT_ACCEPTED;
+            } else {
+                result = MAV_RESULT_UNSUPPORTED;
+                sendStatusText(MAV_SEVERITY_WARNING, "REBOOT/SHUTDOWN OPTION NOT SUPPORTED");
+            }
+            break;
+        }
+
         default: result = MAV_RESULT_UNSUPPORTED; break;
     }
 
@@ -737,27 +909,19 @@ void MavlinkHandler::handleMissionRequest(const mavlink_message_t& msg) {
     if (request.seq >= wp_sum) return;
 
     mavlink_message_t reply;
+    float rad = (request.seq < 100) ? waypoint_radius[request.seq] : 0.0f;
     mavlink_msg_mission_item_int_pack(
         SYSTEM_ID, COMPONENT_ID, &reply,
         msg.sysid, msg.compid,
         request.seq, MAV_FRAME_GLOBAL_RELATIVE_ALT,
         MAV_CMD_NAV_WAYPOINT, 0, 1,
-        0, 0, 0, 0,
+        0, rad, 0, 0,
         waypoint[request.seq].lat,
         waypoint[request.seq].lng,
         waypoint[request.seq].alt / 100.0f,
         MAV_MISSION_TYPE_MISSION);
     replyTarget(reply);  // Hanya ke sender
     Serial.printf("Sent mission item %d\n", request.seq);
-
-    if (request.seq == wp_sum - 1) {
-        mavlink_message_t ack;
-        mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
-                                     msg.sysid, msg.compid,
-                                     MAV_MISSION_ACCEPTED,
-                                     MAV_MISSION_TYPE_MISSION);
-        replyTarget(ack);  // Hanya ke sender
-    }
 }
 
 void MavlinkHandler::handleMissionRequestInt(const mavlink_message_t& msg) {
@@ -766,85 +930,97 @@ void MavlinkHandler::handleMissionRequestInt(const mavlink_message_t& msg) {
     if (request.seq >= wp_sum) return;
 
     mavlink_message_t reply;
+    float rad = (request.seq < 100) ? waypoint_radius[request.seq] : 0.0f;
     mavlink_msg_mission_item_int_pack(
         SYSTEM_ID, COMPONENT_ID, &reply,
         msg.sysid, msg.compid,
         request.seq, MAV_FRAME_GLOBAL_RELATIVE_ALT,
         MAV_CMD_NAV_WAYPOINT, 0, 1,
-        0, 0, 0, 0,
+        0, rad, 0, 0,
         waypoint[request.seq].lat,
         waypoint[request.seq].lng,
         waypoint[request.seq].alt / 100.0f,
         MAV_MISSION_TYPE_MISSION);
     replyTarget(reply);  // Hanya ke sender
     Serial.printf("Sent mission item int %d\n", request.seq);
-
-    if (request.seq == wp_sum - 1) {
-        mavlink_message_t ack;
-        mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
-                                     msg.sysid, msg.compid,
-                                     MAV_MISSION_ACCEPTED,
-                                     MAV_MISSION_TYPE_MISSION);
-        replyTarget(ack);  // Hanya ke sender
-    }
 }
 
 void MavlinkHandler::handleMissionCount(const mavlink_message_t& msg) {
     mavlink_mission_count_t count_msg;
     mavlink_msg_mission_count_decode(&msg, &count_msg);
     expected_count = count_msg.count;
-    
-    // DEBUG: Mission count received
-    char debug_count[100];
-    snprintf(debug_count, sizeof(debug_count), "DEBUG WP: MISSION_COUNT received, expecting %d WP", expected_count);
-    sendStatusText(MAV_SEVERITY_INFO, debug_count);
+    lastMissionActivity = getMillis();
+    mission_port = current_port;
+    mission_target_sys = msg.sysid;
+    mission_target_comp = msg.compid;
+
+    if (expected_count == 0) {
+        wp_sum = 0;
+        clearWaypointEEPROM();
+        flag_wp = -1;
+        flag_takeoff = -1;
+        mission_state = MISSION_IDLE;
+
+        mavlink_message_t ack;
+        mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
+                                     mission_target_sys, mission_target_comp,
+                                     MAV_MISSION_ACCEPTED,
+                                     MAV_MISSION_TYPE_MISSION);
+        replyMission(ack);
+        sendStatusText(MAV_SEVERITY_INFO, "Mission cleared (0 count)");
+        return;
+    }
 
     if (expected_count > MAX_MISSION) {
         mavlink_message_t ack;
         mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
-                                     msg.sysid, msg.compid,
-                                     MAV_MISSION_ERROR,
+                                     mission_target_sys, mission_target_comp,
+                                     MAV_MISSION_NO_SPACE,
                                      MAV_MISSION_TYPE_MISSION);
-        replyTarget(ack);  // Hanya ke sender
+        replyMission(ack);
         sendStatusText(MAV_SEVERITY_WARNING, "Mission count too large");
+        mission_state = MISSION_IDLE;
         return;
     }
 
     mission_state       = MISSION_RECEIVING;
     current_upload_seq  = 0;
 
-    mavlink_message_t req;
-    mavlink_msg_mission_request_int_pack(SYSTEM_ID, COMPONENT_ID, &req,
-                                          msg.sysid, msg.compid, 0,
-                                          MAV_MISSION_TYPE_MISSION);
-    replyTarget(req);  // Hanya ke sender
-    
-    sendStatusText(MAV_SEVERITY_INFO, "DEBUG WP: Requesting seq=0");
+    // Kirim request item 0 tunggal (INT) khusus ke mission_port
+    mavlink_message_t req_int;
+    mavlink_msg_mission_request_int_pack(SYSTEM_ID, COMPONENT_ID, &req_int,
+                                         mission_target_sys, mission_target_comp, 0,
+                                         MAV_MISSION_TYPE_MISSION);
+    replyMission(req_int);
 }
 
 void MavlinkHandler::handleMissionItemInt(const mavlink_message_t& msg) {
     if (mission_state != MISSION_RECEIVING) {
-        char debug_state[80];
-        snprintf(debug_state, sizeof(debug_state), "DEBUG WP: MISSION_ITEM_INT ignored, mission_state=%d (not RECEIVING)", mission_state);
-        sendStatusText(MAV_SEVERITY_WARNING, debug_state);
         return;
     }
 
     mavlink_mission_item_int_t item;
     mavlink_msg_mission_item_int_decode(&msg, &item);
+    lastMissionActivity = getMillis();
 
-    // DEBUG: Item received
-    char debug_item[100];
-    snprintf(debug_item, sizeof(debug_item), "DEBUG WP: Received seq=%d (expected seq=%d)", item.seq, current_upload_seq);
-    sendStatusText(MAV_SEVERITY_INFO, debug_item);
+    // Toleransi retransmisi / duplikat dari client: jika client kirim ulang item yang baru diproses
+    if (item.seq + 1 == current_upload_seq) {
+        mavlink_message_t req_int;
+        mavlink_msg_mission_request_int_pack(SYSTEM_ID, COMPONENT_ID, &req_int,
+                                             mission_target_sys, mission_target_comp,
+                                             current_upload_seq,
+                                             MAV_MISSION_TYPE_MISSION);
+        replyMission(req_int);
+        return;
+    }
 
     if (item.seq != current_upload_seq) {
         mavlink_message_t ack;
         mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
-                                     msg.sysid, msg.compid,
+                                     mission_target_sys, mission_target_comp,
                                      MAV_MISSION_INVALID_SEQUENCE,
                                      MAV_MISSION_TYPE_MISSION);
-        replyTarget(ack);  // Hanya ke sender
+        replyMission(ack);
         mission_state = MISSION_IDLE;
         sendStatusText(MAV_SEVERITY_WARNING, "Invalid mission sequence");
         return;
@@ -853,36 +1029,32 @@ void MavlinkHandler::handleMissionItemInt(const mavlink_message_t& msg) {
     waypoint[item.seq].lat = item.x;
     waypoint[item.seq].lng = item.y;
     waypoint[item.seq].alt = (int32_t)(item.z * 100.0f);
+    if (item.seq < 100) {
+        waypoint_radius[item.seq] = item.param2;
+    }
 
     current_upload_seq++;
 
     if (current_upload_seq < expected_count) {
-        mavlink_message_t req;
-        mavlink_msg_mission_request_int_pack(SYSTEM_ID, COMPONENT_ID, &req,
-                                              msg.sysid, msg.compid,
-                                              current_upload_seq,
-                                              MAV_MISSION_TYPE_MISSION);
-        replyTarget(req);  // Hanya ke sender
-        
-        // DEBUG: Next item requested
-        char debug_req[80];
-        snprintf(debug_req, sizeof(debug_req), "DEBUG WP: Requesting seq=%d", current_upload_seq);
-        sendStatusText(MAV_SEVERITY_INFO, debug_req);
+        mavlink_message_t req_int;
+        mavlink_msg_mission_request_int_pack(SYSTEM_ID, COMPONENT_ID, &req_int,
+                                             mission_target_sys, mission_target_comp,
+                                             current_upload_seq,
+                                             MAV_MISSION_TYPE_MISSION);
+        replyMission(req_int);
     } else {
         wp_sum = expected_count;
-        char debug_msg[80];
-        snprintf(debug_msg, sizeof(debug_msg), "DEBUG WP: All %d items received, sending ACK", wp_sum);
-        sendStatusText(MAV_SEVERITY_INFO, debug_msg);
-        
+        flag_wp = (wp_sum > 1) ? 1 : 0;
         mavlink_message_t ack;
         mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
-                                     msg.sysid, msg.compid,
+                                     mission_target_sys, mission_target_comp,
                                      MAV_MISSION_ACCEPTED,
                                      MAV_MISSION_TYPE_MISSION);
-        replyTarget(ack);  // Hanya ke sender
+        replyMission(ack);
         mission_state = MISSION_IDLE;
         sendStatusText(MAV_SEVERITY_INFO, "Mission upload complete");
-        if (saveWaypointsToEEPROM()) sendStatusText(MAV_SEVERITY_INFO, "Saved to EEPROM");
+        saveWaypointsToEEPROM();
+        sendHomePosition();
     }
 }
 
@@ -891,14 +1063,26 @@ void MavlinkHandler::handleMissionItem(const mavlink_message_t& msg) {
 
     mavlink_mission_item_t item;
     mavlink_msg_mission_item_decode(&msg, &item);
+    lastMissionActivity = getMillis();
+
+    // Toleransi retransmisi / duplikat dari client (legacy)
+    if (item.seq + 1 == current_upload_seq) {
+        mavlink_message_t req;
+        mavlink_msg_mission_request_pack(SYSTEM_ID, COMPONENT_ID, &req,
+                                         mission_target_sys, mission_target_comp,
+                                         current_upload_seq,
+                                         MAV_MISSION_TYPE_MISSION);
+        replyMission(req);
+        return;
+    }
 
     if (item.seq != current_upload_seq) {
         mavlink_message_t ack;
         mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
-                                     msg.sysid, msg.compid,
+                                     mission_target_sys, mission_target_comp,
                                      MAV_MISSION_INVALID_SEQUENCE,
                                      MAV_MISSION_TYPE_MISSION);
-        replyTarget(ack);  // Hanya ke sender
+        replyMission(ack);
         mission_state = MISSION_IDLE;
         sendStatusText(MAV_SEVERITY_WARNING, "Invalid mission sequence");
         return;
@@ -907,52 +1091,75 @@ void MavlinkHandler::handleMissionItem(const mavlink_message_t& msg) {
     waypoint[item.seq].lat = (int32_t)(item.x * 1e7);
     waypoint[item.seq].lng = (int32_t)(item.y * 1e7);
     waypoint[item.seq].alt = (int32_t)(item.z * 100.0f);
+    if (item.seq < 100) {
+        waypoint_radius[item.seq] = item.param2;
+    }
     current_upload_seq++;
 
     if (current_upload_seq < expected_count) {
         mavlink_message_t req;
         mavlink_msg_mission_request_pack(SYSTEM_ID, COMPONENT_ID, &req,
-                                          msg.sysid, msg.compid,
-                                          current_upload_seq,
-                                          MAV_MISSION_TYPE_MISSION);
-        replyTarget(req);  // Hanya ke sender
+                                         mission_target_sys, mission_target_comp,
+                                         current_upload_seq,
+                                         MAV_MISSION_TYPE_MISSION);
+        replyMission(req);
     } else {
         wp_sum = expected_count;
-        char debug_msg[80];
-        snprintf(debug_msg, sizeof(debug_msg), "Mission (legacy) uploaded: %d WP", wp_sum);
-        sendStatusText(MAV_SEVERITY_INFO, debug_msg);
-        
+        flag_wp = (wp_sum > 1) ? 1 : 0;
         mavlink_message_t ack;
         mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
-                                     msg.sysid, msg.compid,
+                                     mission_target_sys, mission_target_comp,
                                      MAV_MISSION_ACCEPTED,
                                      MAV_MISSION_TYPE_MISSION);
-        replyTarget(ack);  // Hanya ke sender
+        replyMission(ack);
         mission_state = MISSION_IDLE;
         sendStatusText(MAV_SEVERITY_INFO, "Mission upload complete");
-        if (saveWaypointsToEEPROM()) sendStatusText(MAV_SEVERITY_INFO, "Saved to EEPROM");
+        saveWaypointsToEEPROM();
+        sendHomePosition();
     }
 }
 
 void MavlinkHandler::handleMissionClearAll(const mavlink_message_t& msg) {
+    mavlink_mission_clear_all_t clear_all;
+    mavlink_msg_mission_clear_all_decode(&msg, &clear_all);
+
     wp_sum = 0;
     clearWaypointEEPROM();
-    
-    // ===== FIX: Reset waypoint index agar misi baru dimulai dari WP 0 =====
+    memset(waypoint_radius, 0, sizeof(waypoint_radius));
     flag_wp = -1;
     flag_takeoff = -1;
-    // =====================================================================
-    
-    // DEBUG: Mission clear received and ACK sent
-    sendStatusText(MAV_SEVERITY_INFO, "DEBUG WP: MISSION_CLEAR received, sending ACK");
+    mission_state = MISSION_IDLE;
+    lastMissionActivity = getMillis();
 
     mavlink_message_t ack;
     mavlink_msg_mission_ack_pack(SYSTEM_ID, COMPONENT_ID, &ack,
                                  msg.sysid, msg.compid,
                                  MAV_MISSION_ACCEPTED,
                                  MAV_MISSION_TYPE_MISSION);
-    replyTarget(ack);  // Hanya ke sender
+    replyTarget(ack);
     sendStatusText(MAV_SEVERITY_INFO, "Missions cleared");
+}
+
+void MavlinkHandler::handleMissionSetCurrent(const mavlink_message_t& msg) {
+    mavlink_mission_set_current_t set_cur;
+    mavlink_msg_mission_set_current_decode(&msg, &set_cur);
+    if (set_cur.seq < wp_sum) {
+        flag_wp = set_cur.seq;
+        if (flag_wp <= 0) flag_wp = 1;
+
+        if (flag_wp < wp_sum) {
+            target_altitude.amsl_cm = waypoint[flag_wp].alt;
+            set_next_WP(waypoint[flag_wp]);
+        }
+
+        if (active_mode == ModeId::AUTO) {
+            auto_navigation_mode = true;
+            auto_state.next_wp_crosstrack = false;
+        }
+    }
+    mavlink_message_t reply;
+    mavlink_msg_mission_current_pack(SYSTEM_ID, COMPONENT_ID, &reply, flag_wp);
+    replyTarget(reply);
 }
 
 void MavlinkHandler::handleSetPositionTargetLocalNed(const mavlink_message_t& msg) {
@@ -1042,6 +1249,7 @@ uint8_t MavlinkHandler::getBaseMode() const {
                    MAV_MODE_FLAG_AUTO_ENABLED |
                    MAV_MODE_FLAG_STABILIZE_ENABLED;
         case ModeId::RTL:
+        case ModeId::LOITER:
             return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED |
                    MAV_MODE_FLAG_AUTO_ENABLED |
                    MAV_MODE_FLAG_STABILIZE_ENABLED;
@@ -1204,6 +1412,60 @@ void MavlinkHandler::sendGlobalPositionInt() {
         hdg             // heading (cdeg)
     );
 
+    mavSendAll(msg);
+}
+
+void MavlinkHandler::sendHomePosition() {
+    int32_t home_lat = 0;
+    int32_t home_lon = 0;
+    int32_t home_alt = 0; // mm MSL
+
+    // Prioritas 1: waypoint[0] jika ada
+    if (waypoint[0].lat != 0 || waypoint[0].lng != 0) {
+        home_lat = waypoint[0].lat;
+        home_lon = waypoint[0].lng;
+        home_alt = waypoint[0].alt * 10; // cm to mm
+    } 
+    // Prioritas 2: GPS fix jika ada
+    else if (gepees.getStatus() >= 2) {
+        home_lat = (int32_t)(gepees.latitude * 1e7);
+        home_lon = (int32_t)(gepees.longitude * 1e7);
+        home_alt = (int32_t)(baro.altitude * 1000.0f);
+    }
+
+    if (home_lat == 0 && home_lon == 0) {
+        return; // Belum ada data koordinat valid
+    }
+
+    float q[4] = {1.0f, 0.0f, 0.0f, 0.0f};
+    mavlink_message_t msg;
+    mavlink_msg_home_position_pack(
+        SYSTEM_ID, COMPONENT_ID, &msg,
+        home_lat, home_lon, home_alt,
+        0.0f, 0.0f, 0.0f,
+        q,
+        0.0f, 0.0f, 0.0f,
+        0
+    );
+    mavSendAll(msg);
+}
+
+void MavlinkHandler::sendAutopilotVersion() {
+    mavlink_message_t msg;
+    uint8_t custom_ver[8] = {0};
+    uint8_t uid2[18] = {0};
+    mavlink_msg_autopilot_version_pack(
+        SYSTEM_ID, COMPONENT_ID, &msg,
+        MAV_PROTOCOL_CAPABILITY_MISSION_INT | MAV_PROTOCOL_CAPABILITY_COMMAND_INT | MAV_PROTOCOL_CAPABILITY_PARAM_FLOAT,
+        3,  // flight_sw_version
+        0,  // middleware_sw_version
+        0,  // os_sw_version
+        0,  // board_version
+        custom_ver,
+        custom_ver,
+        custom_ver,
+        0, 0, 0, uid2
+    );
     mavSendAll(msg);
 }
 
@@ -1377,10 +1639,24 @@ void MavlinkHandler::mavlinkTask() {
         sendRcChannelsRaw();
     }
 
-    // Kirim total WP count ke RPI setiap 1 detik
-    if (now - lastWpCount >= 1000) {
-        lastWpCount = now;
-        sendMissionCountToRPI();
+    // Home Position (1 Hz untuk sinkronisasi koordinat Home di GCS)
+    static uint32_t lastHomePos = 0;
+    if (now - lastHomePos >= 1000) {
+        lastHomePos = now;
+        sendHomePosition();
+    }
+
+    // Penyiaran berkala MISSION_COUNT dinonaktifkan agar tidak mengganggu inisiasi transaksi misi MAVLink
+    // (GCS atau RPi dapat meminta count via MISSION_REQUEST_LIST secara standar)
+    // if (mission_state == MISSION_IDLE && (now - lastWpCount >= 1000)) {
+    //     lastWpCount = now;
+    //     sendMissionCountToRPI();
+    // }
+
+    // Safety timeout untuk transaksi upload/download mission (> 5 detik tanpa aktivitas)
+    if (mission_state != MISSION_IDLE && (now - lastMissionActivity >= 5000)) {
+        mission_state = MISSION_IDLE;
+        sendStatusText(MAV_SEVERITY_WARNING, "WP: upload timeout, state reset to IDLE");
     }
 
     // RC debug print - aktif agar bisa monitor RC di Serial Monitor
@@ -1406,6 +1682,16 @@ void MavlinkHandler::mavlinkTask() {
 void notifyWaypointReached(uint16_t seq) {
     extern MavlinkHandler mavHandler;
     mavHandler.notifyWaypointReached(seq);
+}
+
+void send_statustext_info(const char* text) {
+    extern MavlinkHandler mavHandler;
+    mavHandler.sendStatusText(MAV_SEVERITY_INFO, text);
+}
+
+void send_immediate_heartbeat() {
+    extern MavlinkHandler mavHandler;
+    mavHandler.sendHeartbeat();
 }
 // ============================================================
 //  PARAM: Kirim satu PARAM_VALUE ke GCS
@@ -1443,7 +1729,10 @@ void MavlinkHandler::handleParamRequestRead(const mavlink_message_t& msg) {
     if (req.param_index >= 0) {
         idx = (req.param_index < PARAM_COUNT) ? req.param_index : -1;
     } else {
-        idx = findParam(req.param_id);
+        char clean_name[17] = {0};
+        memcpy(clean_name, req.param_id, 16);
+        clean_name[16] = '\0';
+        idx = findParam(clean_name);
     }
 
     if (idx >= 0) {
@@ -1462,21 +1751,27 @@ void MavlinkHandler::handleParamSet(const mavlink_message_t& msg) {
 
     if (ps.target_system != SYSTEM_ID && ps.target_system != 0) return;
 
-    int idx = findParam(ps.param_id);
+    // Sanitasi string nama parameter (maks 16 char MAVLink)
+    char clean_name[17] = {0};
+    memcpy(clean_name, ps.param_id, 16);
+    clean_name[16] = '\0';
+
+    int idx = findParam(clean_name);
     if (idx < 0) {
         sendStatusText(MAV_SEVERITY_WARNING, "PARAM SET: NOT FOUND");
         return;
     }
 
-    // Clamp ke batas, langsung tulis ke fw_gain via pointer
+    // Clamp ke batas, langsung tulis ke target via pointer
     float val = constrain(ps.param_value,
                           g_params[idx].min_val,
                           g_params[idx].max_val);
     *g_params[idx].target = val;
 
-    saveParamsToEEPROM();
+    // Simpan cepat HANYA parameter ini ke EEPROM (non-blocking, ~2 mikrodetik)
+    saveSingleParamToEEPROM((uint16_t)idx);
 
-    // Wajib echo balik PARAM_VALUE setelah SET
+    // Wajib echo balik PARAM_VALUE setelah SET agar Mission Planner tidak timeout
     sendParamValue((uint16_t)idx);
 
     char buf[50];

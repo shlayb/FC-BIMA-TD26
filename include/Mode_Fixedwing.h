@@ -21,7 +21,7 @@ void exit_auto(){
     enterauto = false;
     auto_throttle_mode = false;
     auto_navigation_mode = false;
-    launch_guard.on_exit_auto();
+    // launch_guard.on_exit_auto();
     // Serial2.print("flag_wp tersimpan: "); Serial2.println(flag_wp);
 }
 
@@ -29,7 +29,7 @@ void init_auto(){
     auto_throttle_mode = true;
     auto_navigation_mode = true;
     auto_loiter_mode = false;
-    launch_guard.on_enter_auto();
+    // launch_guard.on_enter_auto();
     
     // Cek apakah ini first entry atau resume
     if (flag_wp <= 0) {
@@ -63,32 +63,19 @@ public:
 
 protected:
   bool _enter() override {
-    // set flags manual
     mode_fbwa_plane      = false;
     auto_navigation_mode = false;
+    auto_throttle_mode   = false;
+    auto_loiter_mode     = false;
+    mode_phase           = 1;
+    current              = ModeId::MANU;
     return true;
   }
 
   void _update() override {
-    ahrs.update_ahrs();
-    nav_gps();
-    
-    mode_fbwa_plane = false;
-    auto_navigation_mode = false;
     servos_out_manual();
-    plane_motors_out();  // pusher.writeMicroseconds(988);
-    // dual_motor_throttle_out_yaw();  // Kontrol throttle langsung ke motor (tanpa yaw diff)
-    payload_control_unified();  // Unified payload control (manual + auto)
-    mode_phase = 1;
-    current = ModeId::MANU;
-    // Serial.print("ch_roll:");
-    // Serial.print(ch_roll);
-    // Serial.print(" |ch_pitch:");
-    // Serial.print(ch_pitch);
-    // Serial.print(" |ch_thr:");
-    // Serial.print(ch_throttle);
-    // Serial.print(" |ch_yaw:");
-    // Serial.print(ch_yaw);
+    plane_motors_out();
+    payload_control_unified();
   }
 
   void _exit() override {
@@ -103,26 +90,22 @@ public:
 
 protected:
   bool _enter() override {
-    mode_fbwa_plane = true;
+    mode_fbwa_plane      = true;
     auto_navigation_mode = false;
+    auto_throttle_mode   = false;
+    auto_loiter_mode     = false;
+    mode_phase           = 2;
+    current              = ModeId::FBWA;
     return true;
   }
 
   void _update() override {
-    ahrs.update_ahrs();
-    nav_gps();
-    
-    mode_fbwa_plane = true;
-    auto_navigation_mode = false;
     fw_control.updateFBWA_FW(ch_roll, ch_pitch, ch_yaw, ch_throttle,
-                          imu.roll, imu.pitch, imu.yaw,
-                          imu.gyro_y, imu.gyro_x, imu.gyro_z);
+                             imu.roll, imu.pitch, imu.yaw,
+                             imu.gyro_y, imu.gyro_x, imu.gyro_z);
     fw_servos_out_fbwa();
     plane_motors_out();
-    // dual_motor_throttle_out_yaw();
-    payload_control_unified();  // Unified payload control (manual + auto)
-    mode_phase = 2;
-    current = ModeId::FBWA;
+    payload_control_unified();
   }
 
   void _exit() override {
@@ -140,49 +123,30 @@ protected:
     if (!enterauto) {
         init_auto();
     }
+    mode_fbwa_plane      = true;
+    auto_navigation_mode = true;
+    auto_throttle_mode   = true;
+    auto_loiter_mode     = false;
+    mode_phase           = 3;
+    current              = ModeId::AUTO;
     return true;
   }
 
   void _update() override {
-    ahrs.update_ahrs();
-    nav_gps();
-    
-    // Cek jika seluruh waypoint misi telah selesai -> transisi ke RTL
-    if (flag_wp >= wp_sum && wp_sum > 0) {
-        mode_now = 5;
-        modes.setMode(ModeId::RTL);
-        active_mode = ModeId::RTL;
-        current = ModeId::RTL;
-        return;
-    }
-
-    mode_fbwa_plane = true;
+    // 1. Navigation & guidance (L1 track following / waypoint sequencing)
     navigate();
-    if (active_mode != ModeId::AUTO || current != ModeId::AUTO || mode_now == 5 || (flag_wp >= wp_sum && wp_sum > 0)) {
-        return;
-    }
-    update_speed_height();
-    update_alt();
-    updateAuto_FW();
-    
-    // Launch Guard: Di darat motor dijamin OFF (988), aktif setelah dilempar / di-shake
-    float safe_pitch_dem = nav_pitch_deg;
-    float safe_roll_dem  = nav_roll_deg;
-    float safe_thr_pwm   = 988.0f;
 
-    launch_guard.update(safe_pitch_dem, safe_roll_dem, safe_thr_pwm);
+    // 2. TECS energy & altitude controller
+    update_tecs();
 
-    if (!launch_guard.is_launch_complete()) {
-        nav_pitch_deg = safe_pitch_dem;
-        nav_roll_deg  = safe_roll_dem;
-    }
-
-    // Cascaded AUTO controller derived from FBWA inner loop + L1 + TECS
+    // 3. Inner attitude PID loop
     fw_control.updateAUTO_FW(imu.roll, imu.pitch, imu.yaw,
                              imu.gyro_y, imu.gyro_x, imu.gyro_z);
+
+    // 4. Actuator outputs
+    payload_control_unified();
     fw_servos_out_fbwa();
-    plane_motors_out_auto(safe_thr_pwm);
-    payload_control_unified();  // Unified payload control (manual + auto)
+    plane_motors_out_auto(); // Full TECS auto throttle control
 
 #if !HITL_ENABLED
     Serial.print("demanded_pitch:"); Serial.print(get_pitch_demand());
@@ -191,9 +155,6 @@ protected:
     Serial.print(" |nav_roll_deg:"); Serial.print(nav_roll_deg);
     Serial.print(" |auto_thr:"); Serial.println(fw_control.get_auto_throttle());
 #endif
-    if (active_mode == ModeId::AUTO && current == ModeId::AUTO) {
-        mode_phase = 3;
-    }
   }
 
   void _exit() override {
@@ -208,35 +169,28 @@ public:
 
 protected:
   bool _enter() override {
-    auto_throttle_mode = true;
+    auto_throttle_mode   = true;
     auto_navigation_mode = true;
-    mode_fbwa_plane = true;
+    auto_loiter_mode     = false;
+    mode_fbwa_plane      = true;
+    mode_phase           = 4;
+    current              = ModeId::GUIDED;
     return true;
   }
 
   void _update() override {
-    ahrs.update_ahrs();
-    nav_gps();
-
-    mode_fbwa_plane = true;
-    auto_navigation_mode = true;
-
     navigate();
-    update_speed_height();
-    update_alt();
-    updateAuto_FW();
+    update_tecs();
     fw_control.updateAUTO_FW(imu.roll, imu.pitch, imu.yaw,
                              imu.gyro_y, imu.gyro_x, imu.gyro_z);
     fw_servos_out_fbwa();
     plane_motors_out_auto();
     payload_control_unified();
-    mode_phase = 4;
-    current = ModeId::GUIDED;
   }
 
   void _exit() override {
     auto_navigation_mode = false;
-    auto_throttle_mode = false;
+    auto_throttle_mode   = false;
   }
 };
 
@@ -268,13 +222,6 @@ protected:
   }
 
   void _update() override {
-    ahrs.update_ahrs();
-    nav_gps();
-
-    mode_fbwa_plane = true;
-    active_mode = ModeId::RTL;
-    current = ModeId::RTL;
-
     // Koordinat HOME tersimpan di waypoint[0]
     Locations home_loc = waypoint[0];
     if (home_loc.lat == 0 && home_loc.lng == 0) {
@@ -287,13 +234,14 @@ protected:
         // Fase 1: Terbang langsung menuju HOME sepanjang garis jalur start -> HOME
         update_waypoint(rtl_start_loc, home_loc, 0.0f);
     } else {
-        // Fase 2: Sudah di area HOME -> Orbit Loiter melingkar 50m radius (Clockwise)
-        update_loiter(home_loc, LOITER_RADIUS_DEFAULT, 1);
+        // Fase 2: Sudah di area HOME -> Orbit Loiter melingkar sesuai WP_LOITER_RAD
+        float rtl_rad = fabsf(loiter_mode_radius);
+        if (rtl_rad < 20.0f) rtl_rad = LOITER_RADIUS_DEFAULT;
+        int8_t rtl_dir = (loiter_mode_radius >= 0.0f) ? 1 : -1;
+        update_loiter(home_loc, rtl_rad, rtl_dir);
     }
 
-    update_speed_height();
-    update_alt();
-    updateAuto_FW();
+    update_tecs();
     fw_control.updateAUTO_FW(imu.roll, imu.pitch, imu.yaw,
                              imu.gyro_y, imu.gyro_x, imu.gyro_z);
     fw_servos_out_fbwa();
@@ -310,20 +258,10 @@ protected:
 };
 
 // =====================================================================
-//  Loiter state variables (accessible from telemetry/MAVLink/Params)
+//  Loiter runtime variables (state/lap tracking)
+//  Variabel konfigurasi (loiter_center_loc, loiter_mode_radius, dll)
+//  berada di Auto_setup.h agar dapat diakses oleh Navigation.h & Params.h
 // =====================================================================
-
-/** Pusat lingkaran loiter (GPS) — di-capture saat mode diaktifkan */
-Locations loiter_center_loc{};
-
-/** Radius loiter dalam meter (default 50m = diameter 100m) */
-float loiter_mode_radius = LOITER_RADIUS_DEFAULT;
-
-/** Arah loiter: 1 = CW (clockwise), -1 = CCW (counter-clockwise) */
-int8_t loiter_mode_direction = -1;  // default CCW
-
-/** Target altitude saat loiter (cm AMSL) */
-float loiter_target_alt_cm = 0.0f;
 
 /** Jumlah putaran penuh (lap) yang sudah diselesaikan */
 uint16_t loiter_lap_count = 0;
@@ -343,9 +281,6 @@ float loiter_duration_sec = 0.0f;
 /** Flag: apakah loiter sudah menangkap circle (dari L1 controller) */
 bool loiter_circle_captured = false;
 
-/** Bank angle limit untuk loiter (degrees) */
-float loiter_bank_limit = 35.0f;
-
 // =====================================================================
 //  Helper: Hitung perubahan bearing dan akumulasi untuk lap counter
 // =====================================================================
@@ -360,10 +295,13 @@ static void update_loiter_lap_counter()
     // Wrap ke range -18000 .. +18000 (centi-degrees)
     delta_cd = wrap_180_cd(delta_cd);
     
+    int8_t dir = (loiter_mode_radius >= 0.0f) ? 1 : -1;
+    loiter_mode_direction = dir;
+
     // Filter delta yang terlalu besar (GPS glitch)
     if (abs(delta_cd) < 3600) {  // max 36° per update = reasonable
         // Akumulasi sesuai arah loiter
-        if (loiter_mode_direction == 1) {
+        if (dir == 1) {
             // CW: bearing bertambah (positif)
             if (delta_cd > 0) {
                 loiter_total_angle_cd += delta_cd;
@@ -403,15 +341,23 @@ protected:
         active_mode          = ModeId::LOITER;
         current              = ModeId::LOITER;
 
-        // --- Capture posisi GPS saat ini sebagai pusat loiter ---
-        ahrs.get_position(loiter_center_loc);
-        
-        // --- Capture altitude saat ini sebagai target ---
-        loiter_target_alt_cm = current_loc.alt;
-        target_altitude.amsl_cm = loiter_target_alt_cm;
+        // --- Handle target loiter: kustom (dari misi selesai) vs capture posisi GPS saat ini ---
+        if (loiter_custom_target_set) {
+            loiter_custom_target_set = false;
+            target_altitude.amsl_cm = loiter_target_alt_cm;
+        } else {
+            ahrs.get_position(loiter_center_loc);
+            loiter_target_alt_cm = current_loc.alt;
+            target_altitude.amsl_cm = loiter_target_alt_cm;
+        }
         
         // --- Set airspeed target ---
         target_airspeed = AIRSPEED_CRUISE;
+
+        // --- Sinkronisasi radius dan arah loiter (ArduPilot WP_LOITER_RAD convention) ---
+        float rad = fabsf(loiter_mode_radius);
+        if (rad < 20.0f) rad = LOITER_RADIUS_DEFAULT;
+        loiter_mode_direction = (loiter_mode_radius >= 0.0f) ? 1 : -1;
         
         // --- Reset lap counter ---
         loiter_lap_count = 0;
@@ -428,9 +374,8 @@ protected:
         Serial.println("[LOITER] ====== MODE LOITER ACTIVATED ======");
         Serial.printf("[LOITER] Center: lat=%ld lng=%ld\n", 
                       loiter_center_loc.lat, loiter_center_loc.lng);
-        Serial.printf("[LOITER] Radius: %.0fm (diameter %.0fm)\n", 
-                      loiter_mode_radius, loiter_mode_radius * 2.0f);
-        Serial.printf("[LOITER] Direction: %s\n", 
+        Serial.printf("[LOITER] Radius: %.0fm (WP_LOITER_RAD: %.0f, %s)\n", 
+                      rad, loiter_mode_radius,
                       loiter_mode_direction == 1 ? "CW" : "CCW");
         Serial.printf("[LOITER] Target Alt: %.1fm | Airspeed: %.1f m/s\n",
                       loiter_target_alt_cm / 100.0f, target_airspeed);
@@ -443,28 +388,21 @@ protected:
     //  _update() — Dipanggil setiap cycle selama LOITER aktif
     // =================================================================
     void _update() override {
-        // ---- 1. Update sensor state ----
-        ahrs.update_ahrs();
-        nav_gps();
+        // ---- 1. L1 Navigation: Hitung lateral acceleration untuk circular path (ArduPilot convention) ----
+        float rad = fabsf(loiter_mode_radius);
+        if (rad < 20.0f) rad = LOITER_RADIUS_DEFAULT;
+        int8_t dir = (loiter_mode_radius >= 0.0f) ? 1 : -1;
+        loiter_mode_direction = dir;
 
-        mode_fbwa_plane = true;
-        active_mode = ModeId::LOITER;
-        current = ModeId::LOITER;
-
-        // ---- 2. L1 Navigation: Hitung lateral acceleration untuk circular path ----
         update_loiter(loiter_center_loc, 
-                      loiter_mode_radius, 
-                      loiter_mode_direction);
+                      rad, 
+                      dir);
 
         // ---- 3. Update circle capture status ----
         loiter_circle_captured = reached_loiter_target();
 
-        // ---- 4. TECS: Update speed/height & pitch/throttle demand ----
-        update_speed_height();
-        update_alt();
-
-        // ---- 5. Konversi guidance output ke attitude setpoints ----
-        updateAuto_FW();
+        // ---- 4. TECS: Guidance & Energy Controller (pitch, throttle, roll) ----
+        update_tecs();
         nav_roll_deg = constrain(nav_roll_deg, -loiter_bank_limit, loiter_bank_limit);
 
         // ---- 6. Inner-loop attitude controller ----
@@ -495,7 +433,7 @@ protected:
                          "laps:%d | time:%.0fs\n",
                          loiter_circle_captured ? "YES" : "NO",
                          dist_to_center,
-                         loiter_mode_radius,
+                         rad,
                          nav_roll_deg,
                          nav_pitch_deg,
                          (float)fw_control.get_auto_throttle(),
@@ -519,20 +457,25 @@ protected:
 
 // =====================================================================
 //  Public API — Untuk mengubah parameter loiter secara runtime
+//  Mengikuti konvensi ArduPilot WP_LOITER_RAD (+ = CW, - = CCW)
 // =====================================================================
 
 inline void loiter_set_radius(float radius_m) {
-    loiter_mode_radius = constrain(radius_m, 20.0f, 500.0f);
-    Serial.printf("[LOITER] Radius updated: %.0fm (diameter %.0fm)\n", 
-                  loiter_mode_radius, loiter_mode_radius * 2.0f);
+    float sgn = (loiter_mode_radius < 0.0f) ? -1.0f : 1.0f;
+    loiter_mode_radius = sgn * constrain(fabsf(radius_m), 20.0f, 500.0f);
+    Serial.printf("[LOITER] Radius updated: %.0fm (%s, WP_LOITER_RAD: %.0f)\n", 
+                  fabsf(loiter_mode_radius), loiter_mode_radius >= 0 ? "CW" : "CCW", loiter_mode_radius);
 }
 
 inline void loiter_set_direction(int8_t dir) {
+    float r = fabsf(loiter_mode_radius);
+    if (r < 20.0f) r = LOITER_RADIUS_DEFAULT;
+    loiter_mode_radius = (dir >= 0) ? r : -r;
     loiter_mode_direction = (dir >= 0) ? 1 : -1;
     loiter_lap_count = 0;
     loiter_total_angle_cd = 0;
-    Serial.printf("[LOITER] Direction updated: %s\n", 
-                  loiter_mode_direction == 1 ? "CW" : "CCW");
+    Serial.printf("[LOITER] Direction updated: %s (WP_LOITER_RAD: %.0f)\n", 
+                  loiter_mode_radius >= 0 ? "CW" : "CCW", loiter_mode_radius);
 }
 
 // Create OOP instances

@@ -118,9 +118,9 @@ void Gepees::initGPS() {
 }
 
 void Gepees::tryAutoDetect() {
-    static const uint32_t candidates[] = {115200, 9600, 38400, 57600, 19200, 230400};
+    static const uint32_t candidates[] = {115200, 38400, 9600, 57600};
     static const uint8_t numCandidates = sizeof(candidates) / sizeof(candidates[0]);
-    static const uint32_t ATTEMPT_INTERVAL_MS = 300;  // jeda antar percobaan baud
+    static const uint32_t ATTEMPT_INTERVAL_MS = 1000;  // jeda 1s antar percobaan baud
 
     uint32_t now = millis();
     if (now - lastAttemptMillis < ATTEMPT_INTERVAL_MS) return;
@@ -128,10 +128,10 @@ void Gepees::tryAutoDetect() {
 
     uint32_t candidate = candidates[candidateIndex];
     gpsSerial.begin(candidate);
-    delay(20);
+    vTaskDelay(pdMS_TO_TICKS(10));
     while (gpsSerial.available()) gpsSerial.read();
 
-    if (gnss.begin(gpsSerial, 200)) {
+    if (gnss.begin(gpsSerial, 50)) {
         baudRate = candidate;
         ubx_handshake_ok = true;
         gnss.setUART1Output(COM_TYPE_UBX);  // matikan NMEA, murni UBX

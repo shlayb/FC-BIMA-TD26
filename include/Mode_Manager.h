@@ -19,7 +19,6 @@ extern float model_uav;
 void setup_mode() {
     ahrs.update_ahrs();
     nav_gps();
-    modes.update();
 
     int model = (int)(model_uav + 0.5f);
 
@@ -56,14 +55,14 @@ void setup_mode() {
                 current = ModeId::AUTO;
             }
         }
-        else if (mode_now == 6) {
+        else if (mode_now == 5) {
             if (active_mode != ModeId::RTL) {
                 modes.setMode(ModeId::RTL);
                 active_mode = ModeId::RTL;
                 current = ModeId::RTL;
             }
         }
-        else if (mode_now == 5) {
+        else if (mode_now == 6) {
             if (active_mode != ModeId::LOITER) {
                 modes.setMode(ModeId::LOITER);
                 active_mode = ModeId::LOITER;
@@ -71,6 +70,7 @@ void setup_mode() {
             }
         }
 
+        modes.update();
         return;
     }
 
@@ -148,6 +148,7 @@ void setup_mode() {
             }
         }
 
+        modes.update();
         return;
     }
 
@@ -161,6 +162,7 @@ void setup_mode() {
             current = ModeId::MANU;
         }
 
+        modes.update();
         return;
     }
 
