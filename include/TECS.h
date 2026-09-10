@@ -45,15 +45,15 @@
     float _spdCompFiltOmega   = 2.0f;
     float _maxClimbRate       = 5.0f;
     float _minSinkRate        = 2.0f;
-    float _maxSinkRate        = 4.0f;
-    float _timeConst          = 5.0f;//3.275f; 
+    float _maxSinkRate        = 3.0f;
+    float _timeConst          = 3.0f;//3.275f; 
     float _landTimeConst      = 2.0f;
     float _ptchDamp           = 0.15f; // Pitch damping untuk meredam osilasi ketinggian (ArduPilot default 0.0-0.1)
     float _land_pitch_damp    = 0;
     float _landDamp           = 0.5f;
     float _thrDamp            = 0.5f;
     float _land_throttle_damp = 0;
-    float _integGain          = 0.05f; // Integrator gain diperhalus untuk mencegah windup/overshoot
+    float _integGain          = 0.02f; // Integrator gain diperhalus untuk mencegah windup/overshoot
     float _integGain_takeoff  = 0;
     float _integGain_land     = 0;
     float _vertAccLim         = 7.0f;
@@ -409,12 +409,14 @@ void _update_speed(float DT)
     if (_TASmax < _TASmin) {
         _TASmax = _TASmin;
     }
-
     // Get measured airspeed or default to trim speed and constrain to range between min and max if
     // airspeed sensor data cannot be used
     if (!ahrs.is_airspeed_sensor_enabled) {
         // If no airspeed available use average of min and max
-        _EAS = constrain(AIRSPEED_CRUISE, MIN_AIRSPEED, MAX_AIRSPEED);
+        // _EAS = constrain(AIRSPEED_CRUISE, MIN_AIRSPEED, MAX_AIRSPEED);
+        float EAS2TAS_now = baro.getEAS2TAS();
+        float tas_estimate = constrain(arspd.v_ms, MIN_AIRSPEED, MAX_AIRSPEED);
+        _EAS = tas_estimate / MAX(EAS2TAS_now, 0.1f);   // hindari div by zero
     }
 
     // limit the airspeed to a minimum of 3 m/s
@@ -741,6 +743,11 @@ void _update_throttle_without_airspeed(int16_t throttle_nudge)
     //TECS_LAND_THR param then use it
     nomThr = (TECS_CRUISE_THROTTLE + throttle_nudge) * 0.01f;
 
+    float speed_err = _TAS_dem_adj - _TAS_state;   // positif kalau kurang cepat dari target
+    float speed_corr = constrain(speed_err * 0.03f, -0.2f, 0.2f); // gain kecil, batasi ±15% throttle
+    nomThr = constrain(nomThr + speed_corr, _THRminf, _THRmaxf);
+    // --- akhir tambahan ---
+
     if (_pitch_dem > 0.0f && _PITCHmaxf > 0.0f)
     {
         _throttle_dem = nomThr + (_THRmaxf - nomThr) * _pitch_dem / _PITCHmaxf;
@@ -867,7 +874,7 @@ void _update_pitch(void)
     // range in one step. This prevents single value glitches from
     // causing massive integrator changes. See Issue#4066
     float integSEB_range = integSEBdot_max - integSEBdot_min;
-    float integSEB_delta = constrain(SEBdot_error * _get_i_gain() * _DT, -integSEB_range*0.1f, integSEB_range*0.1f);
+    float integSEB_delta = constrain(SEBdot_error * _get_i_gain() * _DT, -integSEB_range*0.05f, integSEB_range*0.05f);
 
     // predict what pitch will be with uncontrained integration
     _pitch_dem_unc = (SEBdot_dem_total + _integSEBdot + integSEB_delta + _integKE) / gainInv;
