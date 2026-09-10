@@ -672,6 +672,8 @@ void MavlinkHandler::handleCommandLong(const mavlink_message_t& msg) {
             else if (custom_mode == 4)  { new_mode = 4; mode_name = "GUIDED"; new_mode_id = ModeId::GUIDED; } 
             else if (custom_mode == 11) { new_mode = 5; mode_name = "RTL"; new_mode_id = ModeId::RTL; } 
             else if (custom_mode == 12) { new_mode = 6; mode_name = "LOITER"; new_mode_id = ModeId::LOITER; } 
+            else if (custom_mode == 17) { new_mode = 1; mode_name = "QSTABILIZE"; new_mode_id = ModeId::COPT; }
+            else if (custom_mode == 18) { new_mode = 7; mode_name = "QHOVER"; new_mode_id = ModeId::QHOV; }
             else {
                 result = MAV_RESULT_UNSUPPORTED;
                 sendStatusText(MAV_SEVERITY_WARNING, "MODE NOT SUPPORTED");
@@ -1253,6 +1255,13 @@ uint8_t MavlinkHandler::getBaseMode() const {
             return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED |
                    MAV_MODE_FLAG_AUTO_ENABLED |
                    MAV_MODE_FLAG_STABILIZE_ENABLED;
+        case ModeId::COPT:
+            return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED |
+                   MAV_MODE_FLAG_MANUAL_INPUT_ENABLED |
+                   MAV_MODE_FLAG_STABILIZE_ENABLED;
+        case ModeId::QHOV:
+            return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED |
+                   MAV_MODE_FLAG_STABILIZE_ENABLED;
         default:           return MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | MAV_MODE_FLAG_MANUAL_INPUT_ENABLED;
     }
 }
@@ -1265,6 +1274,8 @@ uint32_t MavlinkHandler::getCustomMode() const {
         case ModeId::AUTO:   return 10;
         case ModeId::RTL:    return 11;
         case ModeId::LOITER: return 12;
+        case ModeId::COPT:   return 17; // QSTABILIZE
+        case ModeId::QHOV:   return 18; // QHOVER
         default:           return 0;
     }
 }

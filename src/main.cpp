@@ -242,11 +242,15 @@ void controlThd(void *pvParameters){
         modes.registerMode(&mLOITER_FW);
         modes.registerMode(&mQHOV);
         modes.registerMode(&mCOPT);
+        modes.registerMode(&mGUIDED);
+        modes.setMode(ModeId::COPT);
+        active_mode = ModeId::COPT;
+        current     = ModeId::COPT;
     }
     for(;;){
-    setup_mode();
-    vTaskDelay(pdMS_TO_TICKS(CONTROL_time)); // Reduced delay for more frequent updates
-  }
+        setup_mode();
+        vTaskDelay(pdMS_TO_TICKS(CONTROL_time)); // 200 Hz inner loop
+    }
     
 };
 

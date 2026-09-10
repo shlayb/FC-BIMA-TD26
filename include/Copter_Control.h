@@ -242,12 +242,6 @@ void copter_ControlFSFB(int16_t ch_r, int16_t ch_p, int16_t ch_y, int16_t ch_thr
     // ===== error sudut (cmd - meas) =====
     const float e_roll  = (-roll_cmd  + trim_roll)  - roll;
     const float e_pitch = (-pitch_cmd + trim_pitch) - (-pitch); // sesuai definisimu
-    Serial.print("ch_r : ");Serial.print(ch_r);Serial.print(" | ");
-    Serial.print("roll pos : ");Serial.print(roll_pos);Serial.print(" | ");
-    Serial.print("roll cmd : ");Serial.print(roll_cmd);Serial.print(" | ");
-    Serial.print("trim : ");Serial.print(trim_roll);Serial.print(" | ");
-    Serial.print("roll : ");Serial.print(roll);Serial.print(" | ");
-    Serial.print("error roll : ");Serial.print(e_roll);Serial.print(" | ");
 
 
     // ===== Stabilize (angle→rate) P-only =====

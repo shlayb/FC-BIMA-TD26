@@ -371,15 +371,15 @@ protected:
         // --- Reset L1 circle capture status ---
         loiter_circle_captured = false;
 
-        Serial.println("[LOITER] ====== MODE LOITER ACTIVATED ======");
-        Serial.printf("[LOITER] Center: lat=%ld lng=%ld\n", 
-                      loiter_center_loc.lat, loiter_center_loc.lng);
-        Serial.printf("[LOITER] Radius: %.0fm (WP_LOITER_RAD: %.0f, %s)\n", 
-                      rad, loiter_mode_radius,
-                      loiter_mode_direction == 1 ? "CW" : "CCW");
-        Serial.printf("[LOITER] Target Alt: %.1fm | Airspeed: %.1f m/s\n",
-                      loiter_target_alt_cm / 100.0f, target_airspeed);
-        Serial.printf("[LOITER] Bank limit: %.0f deg\n", loiter_bank_limit);
+        // Serial.println("[LOITER] ====== MODE LOITER ACTIVATED ======");
+        // Serial.printf("[LOITER] Center: lat=%ld lng=%ld\n", 
+        //               loiter_center_loc.lat, loiter_center_loc.lng);
+        // Serial.printf("[LOITER] Radius: %.0fm (WP_LOITER_RAD: %.0f, %s)\n", 
+        //               rad, loiter_mode_radius,
+        //               loiter_mode_direction == 1 ? "CW" : "CCW");
+        // Serial.printf("[LOITER] Target Alt: %.1fm | Airspeed: %.1f m/s\n",
+        //               loiter_target_alt_cm / 100.0f, target_airspeed);
+        // Serial.printf("[LOITER] Bank limit: %.0f deg\n", loiter_bank_limit);
 
         return true;
     }
@@ -428,17 +428,17 @@ protected:
             
             float dist_to_center = current_loc.get_distance(loiter_center_loc);
             
-            Serial.printf("[LOITER] circle:%s | dist:%.1fm | rad:%.0fm | "
-                         "roll:%.1f | pitch:%.1f | thr:%.0f%% | "
-                         "laps:%d | time:%.0fs\n",
-                         loiter_circle_captured ? "YES" : "NO",
-                         dist_to_center,
-                         rad,
-                         nav_roll_deg,
-                         nav_pitch_deg,
-                         (float)fw_control.get_auto_throttle(),
-                         loiter_lap_count,
-                         loiter_duration_sec);
+            // Serial.printf("[LOITER] circle:%s | dist:%.1fm | rad:%.0fm | "
+            //              "roll:%.1f | pitch:%.1f | thr:%.0f%% | "
+            //              "laps:%d | time:%.0fs\n",
+            //              loiter_circle_captured ? "YES" : "NO",
+            //              dist_to_center,
+            //              rad,
+            //              nav_roll_deg,
+            //              nav_pitch_deg,
+            //              (float)fw_control.get_auto_throttle(),
+            //              loiter_lap_count,
+            //              loiter_duration_sec);
         }
     }
 
@@ -449,9 +449,9 @@ protected:
         auto_throttle_mode = false;
         auto_loiter_mode   = false;
 
-        Serial.println("[LOITER] ====== MODE LOITER DEACTIVATED ======");
-        Serial.printf("[LOITER] Total laps: %d | Duration: %.1fs\n", 
-                      loiter_lap_count, loiter_duration_sec);
+        // Serial.println("[LOITER] ====== MODE LOITER DEACTIVATED ======");
+        // Serial.printf("[LOITER] Total laps: %d | Duration: %.1fs\n", 
+        //               loiter_lap_count, loiter_duration_sec);
     }
 };
 
@@ -463,8 +463,8 @@ protected:
 inline void loiter_set_radius(float radius_m) {
     float sgn = (loiter_mode_radius < 0.0f) ? -1.0f : 1.0f;
     loiter_mode_radius = sgn * constrain(fabsf(radius_m), 20.0f, 500.0f);
-    Serial.printf("[LOITER] Radius updated: %.0fm (%s, WP_LOITER_RAD: %.0f)\n", 
-                  fabsf(loiter_mode_radius), loiter_mode_radius >= 0 ? "CW" : "CCW", loiter_mode_radius);
+    // Serial.printf("[LOITER] Radius updated: %.0fm (%s, WP_LOITER_RAD: %.0f)\n", 
+    //               fabsf(loiter_mode_radius), loiter_mode_radius >= 0 ? "CW" : "CCW", loiter_mode_radius);
 }
 
 inline void loiter_set_direction(int8_t dir) {
@@ -474,8 +474,8 @@ inline void loiter_set_direction(int8_t dir) {
     loiter_mode_direction = (dir >= 0) ? 1 : -1;
     loiter_lap_count = 0;
     loiter_total_angle_cd = 0;
-    Serial.printf("[LOITER] Direction updated: %s (WP_LOITER_RAD: %.0f)\n", 
-                  loiter_mode_radius >= 0 ? "CW" : "CCW", loiter_mode_radius);
+    // Serial.printf("[LOITER] Direction updated: %s (WP_LOITER_RAD: %.0f)\n", 
+    //               loiter_mode_radius >= 0 ? "CW" : "CCW", loiter_mode_radius);
 }
 
 // Create OOP instances

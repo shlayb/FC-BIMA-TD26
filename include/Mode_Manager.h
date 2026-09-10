@@ -126,7 +126,7 @@ void setup_mode() {
         }
 
         else if (mode_now == 4) {
-            want = ModeId::FBWA;
+            want = ModeId::GUIDED;
         }
 
         else if (mode_now == 5) {
@@ -135,6 +135,10 @@ void setup_mode() {
 
         else if (mode_now == 6) {
             want = ModeId::LOITER;
+        }
+
+        else if (mode_now == 7) {
+            want = ModeId::QHOV;
         }
 
         else {
