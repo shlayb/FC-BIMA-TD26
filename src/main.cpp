@@ -145,7 +145,7 @@ void GPS(void *pvParameters){
     for(;;){
 #if !HITL_ENABLED
         gepees.updateGPS();
-        update_gps_led();
+        // update_gps_led();
 #endif
         vTaskDelay(pdMS_TO_TICKS(GPS_time)); // Reduced delay for more frequent updates
     }
