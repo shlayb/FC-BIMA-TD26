@@ -14,6 +14,17 @@ extern float model_uav;
 extern float _L1_period;
 extern float _L1_damping;
 
+// TECS variables
+extern float _timeConst;
+extern float _ptchDamp;
+
+// Simple Altitude Pitch Controller
+extern float alt_kP;
+extern float alt_kI;
+extern float alt_kD;
+extern float alt_pitch_ff;
+extern float use_simple_alt_pitch;
+
 // Actuator Pin variables
 extern float SERVO_RUD_L;
 extern float MOTOR_1_PIN;
@@ -177,6 +188,22 @@ inline void initParams() {
     g_params[i++] = {"WP_LOITER_RAD",   &loiter_mode_radius,                  50.0f, -500.0f, 500.0f};
     g_params[i++] = {"FW_LOIT_BANK",    &loiter_bank_limit,                   35.0f,   15.0f,  60.0f};
     g_params[i++] = {"MIS_DONE_BEHAVE", &mis_done_behave,                      1.0f,    0.0f,   1.0f};
+
+    // ============================================================
+    //  TECS TUNING PARAMETERS (ArduPilot Standard)
+    //  Ditaruh di akhir agar urutan indeks parameter EEPROM lama tidak bergeser
+    // ============================================================
+    g_params[i++] = {"TECS_TIME_CONST", &_timeConst,                           5.0f,    1.0f,  15.0f};
+    g_params[i++] = {"TECS_PTCH_DAMP",  &_ptchDamp,                            0.15f,   0.0f,   1.0f};
+
+    // ============================================================
+    //  SIMPLE ALTITUDE HOLD PID (ALT -> PITCH)
+    // ============================================================
+    g_params[i++] = {"ALT_P_USE",       &use_simple_alt_pitch,                 1.0f,    0.0f,   1.0f};
+    g_params[i++] = {"ALT_P_KP",        &alt_kP,                               0.06f,   0.0f,   2.0f};
+    g_params[i++] = {"ALT_P_KI",        &alt_kI,                              0.005f,   0.0f,   0.5f};
+    g_params[i++] = {"ALT_P_KD",        &alt_kD,                               0.15f,   0.0f,   2.0f};
+    g_params[i++] = {"ALT_P_FF",        &alt_pitch_ff,                         0.0f,  -10.0f,  10.0f};
 
     PARAM_COUNT = i;
 }

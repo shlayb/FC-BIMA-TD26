@@ -118,7 +118,7 @@ void Gepees::initGPS() {
 }
 
 void Gepees::tryAutoDetect() {
-    static const uint32_t candidates[] = {115200, 38400, 9600, 57600, 230400};
+    static const uint32_t candidates[] = {230400};
     static const uint8_t numCandidates = sizeof(candidates) / sizeof(candidates[0]);
     static const uint32_t ATTEMPT_INTERVAL_MS = 1000;  // jeda 1s antar percobaan baud
 

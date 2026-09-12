@@ -67,7 +67,7 @@
     int8_t  _pitch_max      = 0;
     int8_t  _pitch_min      = 0;
     int8_t  _land_pitch_max = 10;
-    float _maxSinkRate_approach = 0;
+    float _maxSinkRate_approWire2ach = 0;
 
     // temporary _pitch_max_limit. Cleared on each loop. Clear when >= 90
     int8_t _pitch_max_limit = 90;
@@ -743,9 +743,9 @@ void _update_throttle_without_airspeed(int16_t throttle_nudge)
     //TECS_LAND_THR param then use it
     nomThr = (TECS_CRUISE_THROTTLE + throttle_nudge) * 0.01f;
 
-    float speed_err = _TAS_dem_adj - _TAS_state;   // positif kalau kurang cepat dari target
-    float speed_corr = constrain(speed_err * 0.03f, -0.2f, 0.2f); // gain kecil, batasi ±15% throttle
-    nomThr = constrain(nomThr + speed_corr, _THRminf, _THRmaxf);
+    // float speed_err = _TAS_dem_adj - _TAS_state;   // positif kalau kurang cepat dari target
+    // float speed_corr = constrain(speed_err * 0.03f, -0.2f, 0.2f); // gain kecil, batasi ±15% throttle
+    nomThr = constrain(nomThr, _THRminf, _THRmaxf);
     // --- akhir tambahan ---
 
     if (_pitch_dem > 0.0f && _PITCHmaxf > 0.0f)
