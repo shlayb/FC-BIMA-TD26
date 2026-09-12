@@ -131,8 +131,8 @@ class FixedWingPhysics:
         self.wind_down = 0.0       # m/s
 
         # Home Coordinates (UGM / Lapangan Grha Sabha Pramana)
-        self.lat_home = -7.7738260
-        self.lon_home = 110.3784420
+        self.lat_home = -7.768000 #-7.7738260
+        self.lon_home = 110.234000 #110.3784420
 
     def step(self, dt: float, elevator_cmd: float, aileron_cmd: float, rudder_cmd: float, throttle_pct: float):
         """
@@ -261,11 +261,28 @@ class HITLSimRunner:
         self.curr_ste_err = 0.0
         self.mode_str = "AUTO"
         self.is_armed = False
+        self.arm_cmd = True  # Status perintah arming (Default: True untuk HITL)
 
         # Stats
         self.rx_count = 0
         self.tx_count = 0
         self.start_time = time.time()
+
+    def arm(self):
+        with self.lock:
+            self.arm_cmd = True
+        print("\n[HITL] Perintah: ARM")
+
+    def disarm(self):
+        with self.lock:
+            self.arm_cmd = False
+        print("\n[HITL] Perintah: DISARM")
+
+    def toggle_arm(self):
+        with self.lock:
+            self.arm_cmd = not self.arm_cmd
+            target = "ARM" if self.arm_cmd else "DISARM"
+        print(f"\n[HITL] Perintah: Toggle -> {target}")
 
     def connect(self):
         print(f"[HITL] Menghubungkan ke Teensy pada {self.port} ({self.baud} baud)...")
@@ -279,8 +296,10 @@ class HITLSimRunner:
         lat, lon = self.physics.get_lat_lon()
         now_ms = int((time.time() - self.start_time) * 1000) & 0xFFFFFFFF
 
-        # Flags: bit0 = airspeed_valid, bit1 = arming (1), bit2 = force_auto (1)
-        flags = 0x02 | 0x04  # Armed + Force AUTO
+        # Flags: bit0 = airspeed_valid, bit1 = arming (1/0), bit2 = force_auto (1)
+        flags = 0x04  # Force AUTO
+        if self.arm_cmd:
+            flags |= 0x02
         if self.enable_pitot:
             flags |= 0x01
 
@@ -387,6 +406,16 @@ class HITLSimRunner:
 
             # Map throttle PWM (1000..2000) ke 0.0..1.0
             self.curr_throttle_pct = np.clip((unpacked[7] - 1000) / 1000.0, 0.0, 1.0)
+
+            # Sinkronisasi status Arming dari Teensy FC
+            fc_armed = bool(unpacked[16])
+            if fc_armed != self.is_armed:
+                self.is_armed = fc_armed
+                # Sinkronkan command arm simulator agar tidak menimpa status FC secara tidak sengaja
+                self.arm_cmd = fc_armed
+                status_str = "ARMED" if fc_armed else "DISARMED"
+                print(f"\n[HITL] Status Arm FC berubah -> {status_str}")
+
             self.rx_count += 1
 
     def sim_loop(self):
@@ -399,15 +428,19 @@ class HITLSimRunner:
 
             # 1. Step physics forward
             with self.lock:
-                # Throttle: gunakan demanded throttle pct dari TECS (0..100 → 0.0..1.0)
-                thr_base = np.clip(self.curr_dem_thr / 100.0, 0.0, 1.0)
-                thr_for_physics = thr_base
+                if self.is_armed:
+                    # Throttle: gunakan demanded throttle pct dari TECS (0..100 → 0.0..1.0)
+                    thr_base = np.clip(self.curr_dem_thr / 100.0, 0.0, 1.0)
+                    thr_for_physics = thr_base
 
-                # Speed governor: jika TAS turun di bawah 12 m/s (safety floor MIN_AIRSPEED),
-                # override ke 85% throttle untuk recovery cepat ke kecepatan cruise 21 m/s.
-                # Ini mencegah TECS yang belum warm-up menyebabkan pesawat melambat terus.
-                if self.physics.TAS < 12.0:
-                    thr_for_physics = max(thr_for_physics, 0.85)
+                    # Speed governor: jika TAS turun di bawah 12 m/s (safety floor MIN_AIRSPEED),
+                    # override ke 85% throttle untuk recovery cepat ke kecepatan cruise 21 m/s.
+                    # Ini mencegah TECS yang belum warm-up menyebabkan pesawat melambat terus.
+                    if self.physics.TAS < 12.0:
+                        thr_for_physics = max(thr_for_physics, 0.85)
+                else:
+                    thr_for_physics = 0.0
+                    self.curr_throttle_pct = 0.0
 
                 v_n, v_e, v_d = self.physics.step(
                     dt,
@@ -459,9 +492,10 @@ class HITLSimRunner:
             if self.tx_count % 50 == 0:
                 lat, lon = self.physics.get_lat_lon()
                 mode_str = getattr(self, 'mode_str', 'AUTO')
-                mode_tag = f"MODE={mode_str}" + (f" (WP {self.curr_active_wp})" if mode_str == "AUTO" else "")
+                arm_tag = "ARMED" if self.is_armed else "DISARMED"
+                mode_tag = f"[{arm_tag}] {mode_str}" + (f" (WP {self.curr_active_wp})" if mode_str == "AUTO" else "")
                 print(f"[SIM t={t_curr:5.1f}s] "
-                      f"{mode_tag:<18} "
+                      f"{mode_tag:<22} "
                       f"x={self.physics.x:6.1f}m N  y={self.physics.y:6.1f}m E  "
                       f"yaw={math.degrees(self.physics.yaw):6.1f}°  "
                       f"roll={math.degrees(self.physics.roll):5.1f}°  "
@@ -501,6 +535,7 @@ def run_dashboard(runner: HITLSimRunner):
     line_alt, = ax1.plot([], [], 'g-', label="Actual Alt (m)", lw=2)
     line_alt_tgt, = ax1.plot([], [], 'c--', label="Target Alt (m)", lw=1.5)
     line_climb, = ax1.plot([], [], 'm:', label="Climb Rate (m/s)", lw=1.2)
+    arm_badge = ax1.text(0.03, 0.88, "[STATUS: ARMED]", transform=ax1.transAxes, fontsize=10, fontweight='bold', color='lime', bbox=dict(boxstyle='round,pad=0.3', facecolor='black', edgecolor='lime', alpha=0.8))
     wp_badge = ax1.text(0.68, 0.88, "Target: WP 1 (80m)", transform=ax1.transAxes, fontsize=10, fontweight='bold', color='lime', bbox=dict(boxstyle='round,pad=0.3', facecolor='black', edgecolor='lime', alpha=0.8))
     ax1.set_title("1. Altitude & Climb Rate Tracking", fontsize=11, fontweight='bold', color='lime')
     ax1.set_xlabel("Time (s)")
@@ -538,10 +573,32 @@ def run_dashboard(runner: HITLSimRunner):
     ax4.grid(True, alpha=0.3)
     ax4.legend(loc="upper left")
 
+    # Keyboard shortcut listener di Matplotlib
+    def on_key_press(event):
+        if event.key in ['d', 'D']:
+            runner.disarm()
+        elif event.key in ['a', 'A']:
+            runner.arm()
+        elif event.key == ' ':
+            runner.toggle_arm()
+
+    fig.canvas.mpl_connect('key_press_event', on_key_press)
+    fig.text(0.5, 0.008, "Kontrol Keyboard: [SPACE] Toggle Arm/Disarm  |  [D] Disarm  |  [A] Arm", ha='center', fontsize=9, color='lightgray')
+
     plt.tight_layout()
 
     def update_plot(frame):
         with runner.lock:
+            # Update badge Arming status
+            if runner.is_armed:
+                arm_badge.set_text("[STATUS: ARMED]")
+                arm_badge.set_color('lime')
+                arm_badge.set_bbox(dict(boxstyle='round,pad=0.3', facecolor='black', edgecolor='lime', alpha=0.8))
+            else:
+                arm_badge.set_text("[STATUS: DISARMED]")
+                arm_badge.set_color('red')
+                arm_badge.set_bbox(dict(boxstyle='round,pad=0.3', facecolor='black', edgecolor='red', alpha=0.8))
+
             mode_name = getattr(runner, 'mode_str', 'AUTO')
             wp_num = getattr(runner, 'curr_active_wp', 1)
             tgt_alt = getattr(runner, 'curr_target_alt', 50.0)
@@ -598,6 +655,29 @@ def run_dashboard(runner: HITLSimRunner):
 
 
 # =============================================================================
+#  TERMINAL INPUT LISTENER THREAD
+# =============================================================================
+def terminal_input_loop(runner: HITLSimRunner):
+    """Membaca input keyboard di terminal (d / a / space / disarm / arm)."""
+    while runner.running:
+        try:
+            line = sys.stdin.readline()
+            if not line:
+                break
+            cmd = line.strip().lower()
+            if cmd in ['d', 'disarm']:
+                runner.disarm()
+            elif cmd in ['a', 'arm']:
+                runner.arm()
+            elif cmd in [' ', 'toggle', 't']:
+                runner.toggle_arm()
+            elif cmd in ['h', 'help']:
+                print("\n[BANTUAN HITL] d/disarm = Disarm | a/arm = Arm | t/space = Toggle | h = Help")
+        except Exception:
+            break
+
+
+# =============================================================================
 #  AUTO-DETECT SERIAL PORT & ENTRY POINT
 # =============================================================================
 def auto_detect_port():
@@ -615,6 +695,7 @@ def main():
     parser.add_argument("--baud", "-b", type=int, default=115200, help="Baud rate (default: 115200)")
     parser.add_argument("--pitot", action="store_true", help="Aktifkan virtual Pitot Tube sensor (Default: False = Full Groundspeed Mode)")
     parser.add_argument("--wind", type=float, default=0.0, help="Headwind magnitude in m/s (e.g. 5.0)")
+    parser.add_argument("--disarm", action="store_true", help="Mulai simulasi dalam kondisi DISARMED (Default: Mulai ARMED)")
     args = parser.parse_args()
 
     port = args.port or auto_detect_port()
@@ -626,18 +707,28 @@ def main():
     print(f"  Baud Rate          : {args.baud}")
     print(f"  Airspeed Mode      : {'Pitot Tube Enabled' if args.pitot else 'FULL GROUNDSPEED (Non-Airspeed TECS)'}")
     print(f"  Simulated Headwind : {args.wind} m/s")
+    print(f"  Initial State      : {'DISARMED' if args.disarm else 'ARMED'}")
     print("=" * 70)
     print("  [INFO] Teensy Dual Serial Aktif:")
     print(f"         • Simulator HITL  : {port}")
     print("         • Mission Planner : Port serial kedua (misal /dev/ttyACM1 atau COM4)")
+    print("  [KONTROL ARM / DISARM]:")
+    print("         • Tekan [SPACE] di Dashboard / Terminal : Toggle Arm/Disarm")
+    print("         • Tekan [D] / ketik 'd'                 : DISARM")
+    print("         • Tekan [A] / ketik 'a'                 : ARM")
+    print("         • Lewat Mission Planner / MAVLink       : Otomatis sinkron!")
     print("=" * 70)
 
     runner = HITLSimRunner(port=port, baud=args.baud, enable_pitot=args.pitot)
+    if args.disarm:
+        runner.arm_cmd = False
     if args.wind > 0:
         runner.physics.wind_north = -args.wind # North headwind
 
     try:
         runner.start()
+        # Jalankan thread pembaca input terminal (background)
+        threading.Thread(target=terminal_input_loop, args=(runner,), daemon=True).start()
         print("\n[HITL] Simulator aktif! Membuka Live Dashboard...")
         run_dashboard(runner)
     except KeyboardInterrupt:

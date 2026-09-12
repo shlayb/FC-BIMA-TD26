@@ -714,6 +714,12 @@ void MavlinkHandler::handleCommandLong(const mavlink_message_t& msg) {
         }
 
         case MAV_CMD_MISSION_START: {
+            if (!arming) {
+                result = MAV_RESULT_DENIED;
+                sendStatusText(MAV_SEVERITY_WARNING, "MISSION START DENIED: VEHICLE DISARMED");
+                break;
+            }
+
             uint16_t first_item = (uint16_t)cmd.param1;
             if (first_item == 0) first_item = 1;
             if (first_item < wp_sum) {
@@ -812,6 +818,51 @@ void MavlinkHandler::handleCommandLong(const mavlink_message_t& msg) {
         case MAV_CMD_GET_HOME_POSITION: {
             sendHomePosition();
             result = MAV_RESULT_ACCEPTED;
+            break;
+        }
+
+        // ============================================================
+        //  MAV_CMD_DO_SET_HOME (Command ID 179)
+        //  param1: 1 = Gunakan posisi saat ini, 0 = Gunakan koordinat
+        //  param5: Latitude (deg)
+        //  param6: Longitude (deg)
+        //  param7: Altitude (m)
+        // ============================================================
+        case MAV_CMD_DO_SET_HOME: {
+            uint8_t use_current = (uint8_t)(cmd.param1 + 0.5f);
+            if (use_current == 1) {
+                if (gepees.getStatus() >= 2) {
+                    waypoint[0].lat = (int32_t)(gepees.latitude * 1e7);
+                    waypoint[0].lng = (int32_t)(gepees.longitude * 1e7);
+                    waypoint[0].alt = (int32_t)(baro.altitude * 100.0f); // meters -> cm
+                    if (wp_sum == 0) wp_sum = 1;
+                    saveWaypointsToEEPROM();
+                    sendHomePosition();
+                    sendStatusText(MAV_SEVERITY_INFO, "HOME SET TO CURRENT LOCATION");
+                    result = MAV_RESULT_ACCEPTED;
+                } else {
+                    sendStatusText(MAV_SEVERITY_WARNING, "SET HOME FAILED: NO GPS FIX");
+                    result = MAV_RESULT_DENIED;
+                }
+            } else {
+                float lat = cmd.param5;
+                float lon = cmd.param6;
+                float alt = cmd.param7;
+
+                if (fabsf(lat) > 0.0001f || fabsf(lon) > 0.0001f) {
+                    waypoint[0].lat = (int32_t)(lat * 1e7);
+                    waypoint[0].lng = (int32_t)(lon * 1e7);
+                    waypoint[0].alt = (int32_t)(alt * 100.0f); // meters -> cm
+                    if (wp_sum == 0) wp_sum = 1;
+                    saveWaypointsToEEPROM();
+                    sendHomePosition();
+                    sendStatusText(MAV_SEVERITY_INFO, "HOME SET TO COORDINATES");
+                    result = MAV_RESULT_ACCEPTED;
+                } else {
+                    sendStatusText(MAV_SEVERITY_WARNING, "SET HOME FAILED: INVALID COORDS");
+                    result = MAV_RESULT_FAILED;
+                }
+            }
             break;
         }
 

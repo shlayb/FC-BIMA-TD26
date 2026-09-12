@@ -13,6 +13,10 @@
 #include "FW_control.h"
 #include "Mode_setup.h"
 
+// Forward declarations for MAVLink notifications
+void send_statustext_info(const char* text);
+void send_immediate_heartbeat();
+
 // ============================================================
 //  HITL CONFIGURATION & STRUCTS
 // ============================================================
@@ -95,9 +99,13 @@ public:
     uint32_t last_packet_time_ms = 0;
     uint32_t packets_received = 0;
     uint32_t packets_sent = 0;
+    bool last_hitl_arm_flag = false;
+    bool hitl_arm_initialized = false;
 
     void init(bool enable_hitl) {
         enabled = enable_hitl;
+        last_hitl_arm_flag = false;
+        hitl_arm_initialized = false;
     }
 
     // Hitung Checksum Fletcher-16
@@ -197,10 +205,20 @@ public:
         ahrs.groundspeed  = pkt.groundspeed_mps;
 
         // 6. Arming & Mode control overrides from simulator
-        if (pkt.flags & 0x02) {
-            arming = true;
+        // Gunakan edge detection agar tidak menimpa perintah arming/disarming dari Mission Planner / GCS
+        bool hitl_arm_flag = (pkt.flags & 0x02) != 0;
+        if (!hitl_arm_initialized) {
+            arming = hitl_arm_flag;
+            last_hitl_arm_flag = hitl_arm_flag;
+            hitl_arm_initialized = true;
+        } else if (hitl_arm_flag != last_hitl_arm_flag) {
+            arming = hitl_arm_flag;
+            last_hitl_arm_flag = hitl_arm_flag;
+            send_statustext_info(arming ? "ARMED (HITL)" : "DISARMED (HITL)");
+            send_immediate_heartbeat();
         } else {
-            arming = false;
+            // Jaga sinkronisasi dengan status arming aktual (misal disarm lewat GCS/MAVLink)
+            last_hitl_arm_flag = arming;
         }
 
         if (pkt.flags & 0x04) {
@@ -228,7 +246,7 @@ public:
         out_pkt.servo_ail_L  = fw_control.servos[1];
         out_pkt.servo_ele    = fw_control.servos[2];
         out_pkt.servo_rud    = fw_control.servos[3];
-        out_pkt.throttle_pwm = fw_control.get_auto_throttle();
+        out_pkt.throttle_pwm = arming ? fw_control.get_auto_throttle() : 1000;
 
         // Demanded outer loop targets
         out_pkt.demanded_pitch_deg    = get_pitch_demand();
