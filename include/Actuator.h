@@ -28,8 +28,8 @@
 float SERVO_RUD_L   = 2;   // pin 2  - MTR 1  (CH_MTR_1)
 float SERVO_RUD_R   = 13;  // pin 13 - MTR 11 (CH_MTR_11)
 float SERVO_ELE     = 37;  // pin 37 - MTR 2  (CH_MTR_2)
-float SERVO_AIL_L   = 6;   // pin 6  - MTR 3  (CH_MTR_3)
-float SERVO_AIL_R   = 33;  // pin 33 - MTR 5  (CH_MTR_5)
+float SERVO_AIL_L   = 33;   // pin 6  - MTR 3  (CH_MTR_3)
+float SERVO_AIL_R   = 6;  // pin 33 - MTR 5  (CH_MTR_5)
 float THROTTLE      = 10;  // pin 10 - MTR 4  (CH_MTR_4)
 float SERVO_PAYLOAD = 36;  // pin 36 - MTR 6  (CH_MTR_6)
 float MOTOR_1_PIN   = 3;   // pin 3  - MTR 7  (Tidak dipakai)
@@ -348,8 +348,8 @@ void servos_out_manual() {
     uint16_t safe_pitch = (ch_pitch >= 900 && ch_pitch <= 2100) ? ch_pitch : 1500;
     uint16_t safe_yaw   = (ch_yaw >= 900 && ch_yaw <= 2100) ? ch_yaw : 1500;
 
-    aileron_L.writeMicroseconds(safe_roll);  // 45 = trim wahana FW
-    aileron_R.writeMicroseconds(safe_roll);  // TODO: besok 24 feb di 0 in dulu
+    aileron_L.writeMicroseconds(3000 - safe_roll);  // 45 = trim wahana FW
+    aileron_R.writeMicroseconds(3000 - safe_roll);  // TODO: besok 24 feb di 0 in dulu
     elevator.writeMicroseconds(safe_pitch);
     rudder_L.writeMicroseconds(safe_yaw);
     rudder_R.writeMicroseconds(safe_yaw);
@@ -357,8 +357,8 @@ void servos_out_manual() {
 
 void fw_servos_out_fbwa() {
     // Hitung output servo dari kontrol pitch, roll, yaw
-    pwm_ail_L = constrain(fw_control.servos[0] + 1500, 988, 2012);
-    pwm_ail_R = constrain(fw_control.servos[1] + 1500, 988, 2012);       
+    pwm_ail_R = constrain(1500 - fw_control.servos[0], 988, 2012);
+    pwm_ail_L = constrain(1500 - fw_control.servos[1], 988, 2012);       
     pwm_ele   = constrain(fw_control.servos[2] + 1500, 988, 2012);
     pwm_rud   = constrain(fw_control.servos[3] + 1500, 988, 2012);
 
@@ -468,8 +468,8 @@ void servos_out_manual_flywing() {
 
 void servos_out_fbwa_flywing() {
     // Hitung output elevon dari kontrol pitch dan roll
-    pwm_ail_L = angleToPwm(u_roll);
-    pwm_ail_R = angleToPwm(u_roll);
+    pwm_ail_L = angleToPwm_reversed(u_roll);
+    pwm_ail_R = angleToPwm_reversed(u_roll);
     pwm_ele   = angleToPwm(u_pitch);
 
     int pwm_l = constrain(abs(basePWM - ((pwm_ele)+(pwm_ail_L))), 988, 2012);
@@ -523,8 +523,8 @@ void servos_out_fbwa_flywing() {
 //////////////////////////////////////////////////////
 
 void servos_out_fbwa() {
-    pwm_ail_L = angleToPwm(u_roll);
-    pwm_ail_R = angleToPwm(u_roll);
+    pwm_ail_L = angleToPwm_reversed(u_roll);
+    pwm_ail_R = angleToPwm_reversed(u_roll);
     pwm_ele = angleToPwm(u_pitch);
     pwm_rud_L = angleToPwm(u_yaw_cmd);
     pwm_rud_R = angleToPwm(u_yaw_cmd);

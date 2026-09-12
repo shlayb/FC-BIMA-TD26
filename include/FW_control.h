@@ -51,6 +51,8 @@ class FW_CONTROL {
                         float gy, float gx, float gz);
     void updateAUTO_FW(float roll, float pitch, float yaw,
                         float gy, float gx, float gz);
+    void updateAUTO_FWPitch(float roll, float pitch, float yaw,
+                        float gy, float gx, float gz);
     FW_gain fw_gain;
     int servos[4] = {0, 0, 0, 0};
     int auto_throttle = 0;
@@ -152,6 +154,33 @@ void FW_CONTROL::getIntegral(int16_t ch_thr, float roll, float pitch, float yaw)
     }
 }
 
+void FW_CONTROL::updateAUTO_FWPitch(float roll, float pitch, float yaw, float gy, float gx, float gz) {
+    // int auto_thr = get_auto_throttle(); // INI AUTO THROT
+    int auto_thr = ch_throttle;
+    getIntegral(auto_thr, roll, pitch, yaw);
+
+    // Gunakan Single Source of Truth dari Navigation / TECS (sudah dihitung di update_tecs)
+    demanded_pitch = nav_pitch_deg;
+    if (demanded_pitch > 0){
+        demanded_pitch = 1.1f * demanded_pitch;
+    }
+    pitch_cmd = 1.1f*(map(ch_pitch - 1500, min_pitch_corr, max_pitch_corr, min_pitch, max_pitch));
+    roll_cmd       = -1.0f * nav_roll_deg;
+
+    u_roll = ((-fw_gain.rate_roll_P * (-roll + roll_int - (roll_cmd + trim_roll))) + (-fw_gain.rate_roll_D * (gy)));
+    u_pitch = ((fw_gain.rate_pitch_P * (-pitch + pitch_int - (-pitch_cmd + trim_pitch))) + (-fw_gain.rate_pitch_D * (gx)));
+
+    servos[0] = (selector[0][0] * u_roll + selector[0][1] * u_pitch + selector[0][2] * u_yaw); // aileron right
+    servos[1] = (selector[1][0] * u_roll + selector[1][1] * u_pitch + selector[1][2] * u_yaw); // aileron left
+    servos[2] = (selector[2][0] * u_roll + selector[2][1] * u_pitch + selector[2][2] * u_yaw); // elevator
+    servos[3] = (selector[3][0] * u_roll + selector[3][1] * u_pitch + selector[3][2] * u_yaw); // rudder
+
+    servos[0] = constrain(servos[0], -400, 400) ;
+    servos[1] = constrain(servos[1], -400, 400) ;
+    servos[2] = constrain(servos[2], -400, 400) ;
+    servos[3] = constrain(servos[3], -400, 400) ;
+}
+
 void FW_CONTROL::updateAUTO_FW(float roll, float pitch, float yaw, float gy, float gx, float gz) {
     // int auto_thr = get_auto_throttle(); // INI AUTO THROT
     int auto_thr = ch_throttle;
@@ -159,7 +188,10 @@ void FW_CONTROL::updateAUTO_FW(float roll, float pitch, float yaw, float gy, flo
 
     // Gunakan Single Source of Truth dari Navigation / TECS (sudah dihitung di update_tecs)
     demanded_pitch = nav_pitch_deg;
-    pitch_cmd      = demanded_pitch;
+    if (demanded_pitch > 0){
+        demanded_pitch = 1.1f * demanded_pitch;
+    }
+    pitch_cmd = demanded_pitch;
     roll_cmd       = -1.0f * nav_roll_deg;
 
     u_roll = ((-fw_gain.rate_roll_P * (-roll + roll_int - (roll_cmd + trim_roll))) + (-fw_gain.rate_roll_D * (gy)));

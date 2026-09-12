@@ -89,14 +89,14 @@ inline float AIRSPEED_STALL  = 13.0f;  // kecepatan stall airframe (m/s)
 
 /** AUTOPILOT CONTROL LIMITS */
 inline float roll_max_deg  = 36.0f;  // sudut max roll auto / fbwa
-inline float pitch_max_deg = 15.0f;  // sudut max nanjak
+inline float pitch_max_deg = 30.0f;  // sudut max nanjak
 inline float pitch_min_deg = -10.0f; // sudut max menukik
 
 #ifndef HEAD_MAX
 #define HEAD_MAX 36
 #endif
 #ifndef PITCH_MAX
-#define PITCH_MAX 15
+#define PITCH_MAX 30
 #endif
 #ifndef PITCH_MIN
 #define PITCH_MIN -10

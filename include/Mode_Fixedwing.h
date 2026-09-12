@@ -163,6 +163,55 @@ protected:
   }
 };
 
+class ModeAuto2_FW : public ModeBase {
+public:
+  ModeId id() const override { return ModeId::AUTO2; }
+
+protected:
+  bool _enter() override {
+    if (!enterauto) {
+        init_auto();
+    }
+    mode_fbwa_plane      = true;
+    auto_navigation_mode = true;
+    auto_throttle_mode   = true;
+    auto_loiter_mode     = false;
+    mode_phase           = 6;
+    current              = ModeId::AUTO2;
+    return true;
+  }
+
+  void _update() override {
+    // 1. Navigation & guidance (L1 track following / waypoint sequencing)
+    navigate();
+
+    // 2. TECS energy & altitude controller
+    update_tecs();
+
+    // 3. Inner attitude PID loop
+    fw_control.updateAUTO_FWPitch(imu.roll, imu.pitch, imu.yaw,
+                             imu.gyro_y, imu.gyro_x, imu.gyro_z);
+
+    // 4. Actuator outputs
+    payload_control_unified();
+    fw_servos_out_fbwa();
+    // plane_motors_out_auto(); // Full TECS auto throttle control
+    plane_motors_out();
+
+#if !HITL_ENABLED
+    // Serial.print("demanded_pitch:"); Serial.print(get_pitch_demand());
+    // Serial.print(" |nav_pitch_deg:"); Serial.print(nav_pitch_deg);
+    // Serial.print(" |demanded_roll:"); Serial.print(nav_roll_cd()/100.0f);
+    // Serial.print(" |nav_roll_deg:"); Serial.print(nav_roll_deg);
+    // Serial.print(" |auto_thr:"); Serial.println(fw_control.get_auto_throttle());
+#endif
+  }
+
+  void _exit() override {
+    exit_auto();
+  }
+};
+
 // ======================= MODE GUIDED (Fixed Wing) =========================
 class ModeGuided_FW : public ModeBase {
 public:
@@ -484,6 +533,7 @@ inline void loiter_set_direction(int8_t dir) {
 ModeManual_FW     mMANU_FW;
 ModeFBWA_FW       mFBWA_FW;
 ModeAuto_FW       mAUTO_FW;
+ModeAuto2_FW      mAUTO2_FW;
 ModeGuided_FW     mGUIDED_FW;
 ModeRTL_FW        mRTL_FW;
 ModeLoiter_FW     mLOITER_FW;

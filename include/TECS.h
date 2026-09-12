@@ -43,10 +43,10 @@
     // TECS tuning parameters
     float _hgtCompFiltOmega   = 5.0f;//3.5f;
     float _spdCompFiltOmega   = 2.0f;
-    float _maxClimbRate       = 5.0f;
-    float _minSinkRate        = 2.0f;
-    float _maxSinkRate        = 3.0f;
-    float _timeConst          = 3.0f;//3.275f; 
+    float _maxClimbRate       = 2.0f;
+    float _minSinkRate        = 1.0f;
+    float _maxSinkRate        = 2.0f;
+    float _timeConst          = 5.0f;//3.275f; 
     float _landTimeConst      = 2.0f;
     float _ptchDamp           = 0.15f; // Pitch damping untuk meredam osilasi ketinggian (ArduPilot default 0.0-0.1)
     float _land_pitch_damp    = 0;

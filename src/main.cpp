@@ -232,6 +232,7 @@ void controlThd(void *pvParameters){
         modes.registerMode(&mFBWA_FW);
         modes.registerMode(&mGUIDED_FW);
         modes.registerMode(&mAUTO_FW);
+        modes.registerMode(&mAUTO2_FW);
         modes.registerMode(&mRTL_FW);
         modes.registerMode(&mLOITER_FW);
         modes.setMode(ModeId::MANU);

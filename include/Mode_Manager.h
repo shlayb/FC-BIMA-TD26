@@ -63,10 +63,10 @@ void setup_mode() {
             }
         }
         else if (mode_now == 6) {
-            if (active_mode != ModeId::LOITER) {
-                modes.setMode(ModeId::LOITER);
-                active_mode = ModeId::LOITER;
-                current = ModeId::LOITER;
+            if (active_mode != ModeId::AUTO2) {
+                modes.setMode(ModeId::AUTO2);
+                active_mode = ModeId::AUTO2;
+                current = ModeId::AUTO2;
             }
         }
 
