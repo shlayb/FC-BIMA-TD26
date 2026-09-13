@@ -25,8 +25,8 @@ inline float alt_integrator     = 0.0f;
 inline float alt_integrator_max = 8.0f;   // batas integrator dalam satuan derajat, cegah windup
 
 // Batas pitch demand (derajat)
-inline float simple_pitch_max_deg = 15.0f;
-inline float simple_pitch_min_deg = -15.0f;
+inline float simple_pitch_max_deg = 30.0f;
+inline float simple_pitch_min_deg = -10.0f;
 
 // Batas rate perubahan pitch demand per detik (derajat/detik) -- untuk kehalusan
 inline float simple_pitch_rate_limit = 8.0f;
