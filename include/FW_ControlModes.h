@@ -12,7 +12,6 @@
 #include "L1_Controller.h"
 #include "Barometer.h"
 #include "Auto_setup.h" // untuk auto juga
-#include "Simple_Alt_Pitch.h"
 
 // int value = 0;
 float nav_roll_deg;
@@ -98,21 +97,15 @@ void calc_nav_roll()
 /** calculate pitch from speed and height controller in auto mode */
 void calc_nav_pitch()
 {
-    if (use_simple_alt_pitch > 0.5f) {
-        static uint64_t last_pitch_calc_us = 0;
-        uint64_t now_us = micros();
-        float dt = (last_pitch_calc_us > 0) ? (now_us - last_pitch_calc_us) * 1.0e-6f : 0.02f;
-        last_pitch_calc_us = now_us;
-        dt = constrain(dt, 0.005f, 0.1f);
-
-        float target_alt_m = target_altitude.amsl_cm * 0.01f;
-        float current_alt_m = baro.altitude;
-        float climb_rate_mps = _climb_rate;
-
-        nav_pitch_deg = update_altitude_pitch_controller(target_alt_m, current_alt_m, climb_rate_mps, dt);
-    } else {
-        nav_pitch_deg = constrain(get_pitch_demand(), pitch_limit_min, pitch_limit_max);
-    }
+    // float demanded_pitch;
+    // if (get_pitch_demand() < -20){
+    //     demanded_pitch = 0;
+    // }
+    // else {
+    //     demanded_pitch = get_pitch_demand();
+    // }
+    
+    nav_pitch_deg = constrain(get_pitch_demand(), pitch_limit_min, pitch_limit_max);
 }
 
 void update_load_factor(void)

@@ -33,7 +33,7 @@ inline float simple_pitch_rate_limit = 8.0f;
 inline float _last_simple_pitch_dem  = 0.0f;
 
 // Toggle untuk memilih apakah memakai Simple Alt Pitch atau TECS
-inline float use_simple_alt_pitch = 1.0f; // 1.0 = aktifkan Simple Pitch, 0.0 = pakai TECS
+inline float use_simple_alt_pitch = 0.0f; // 1.0 = aktifkan Simple Pitch, 0.0 = pakai TECS
 
 inline void reset_altitude_pitch_controller() {
     alt_integrator = 0.0f;

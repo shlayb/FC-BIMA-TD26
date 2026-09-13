@@ -188,9 +188,6 @@ void FW_CONTROL::updateAUTO_FW(float roll, float pitch, float yaw, float gy, flo
 
     // Gunakan Single Source of Truth dari Navigation / TECS (sudah dihitung di update_tecs)
     demanded_pitch = nav_pitch_deg;
-    if (demanded_pitch > 0){
-        demanded_pitch = 1.1f * demanded_pitch;
-    }
     pitch_cmd = demanded_pitch;
     roll_cmd       = -1.0f * nav_roll_deg;
 
