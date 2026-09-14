@@ -29,7 +29,6 @@ void init_auto(){
     auto_throttle_mode = true;
     auto_navigation_mode = true;
     auto_loiter_mode = false;
-    reset_altitude_pitch_controller();
     // launch_guard.on_enter_auto();
     
     // Cek apakah ini first entry atau resume

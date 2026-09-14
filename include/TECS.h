@@ -1026,4 +1026,3 @@ void update_pitch_throttle( int32_t hgt_dem_cm,
     // Calculate pitch demand
     _update_pitch(); // ngehasilin nilai pitch
 }
-

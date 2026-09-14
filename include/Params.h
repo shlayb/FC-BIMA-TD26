@@ -18,13 +18,6 @@ extern float _L1_damping;
 extern float _timeConst;
 extern float _ptchDamp;
 
-// Simple Altitude Pitch Controller
-extern float alt_kP;
-extern float alt_kI;
-extern float alt_kD;
-extern float alt_pitch_ff;
-extern float use_simple_alt_pitch;
-
 // Actuator Pin variables
 extern float SERVO_RUD_L;
 extern float MOTOR_1_PIN;
@@ -137,8 +130,8 @@ inline void initParams() {
     //  FIXED WING AUTO & TECS TUNING (PX4 STYLE)
     // ============================================================
     g_params[i++] = {"FW_THR_CRUISE",  &tecs_cruise_throttle,                 70.0f,   0.0f, 100.0f};
-    g_params[i++] = {"FW_THR_MIN",     &tecs_min_throttle,                    30.0f,   0.0f, 100.0f};
-    g_params[i++] = {"FW_THR_MAX",     &tecs_max_throttle,                    85.0f,   0.0f, 100.0f};
+    // g_params[i++] = {"FW_THR_MIN",     &tecs_min_throttle,                    30.0f,   0.0f, 100.0f};
+    // g_params[i++] = {"FW_THR_MAX",     &tecs_max_throttle,                    85.0f,   0.0f, 100.0f};
     g_params[i++] = {"FW_GND_SPD_MIN", &min_gndspeed,                          5.0f,   0.0f,  30.0f};
     g_params[i++] = {"FW_R_LIM_MAX",   &roll_max_deg,                         35.0f,  10.0f,  60.0f};
     g_params[i++] = {"FW_P_LIM_MAX",   &pitch_max_deg,                        18.0f,   5.0f,  45.0f};
@@ -195,16 +188,6 @@ inline void initParams() {
     // ============================================================
     g_params[i++] = {"TECS_TIME_CONST", &_timeConst,                           5.0f,    1.0f,  15.0f};
     g_params[i++] = {"TECS_PTCH_DAMP",  &_ptchDamp,                            0.0f,    0.0f,   1.0f};
-
-    // ============================================================
-    //  SIMPLE ALTITUDE HOLD PID (ALT -> PITCH)
-    // ============================================================
-    g_params[i++] = {"ALT_P_USE",       &use_simple_alt_pitch,                 0.0f,    0.0f,   1.0f};
-    g_params[i++] = {"ALT_P_KP",        &alt_kP,                               0.06f,   0.0f,   2.0f};
-    g_params[i++] = {"ALT_P_KI",        &alt_kI,                              0.005f,   0.0f,   0.5f};
-    g_params[i++] = {"ALT_P_KD",        &alt_kD,                               0.15f,   0.0f,   2.0f};
-    g_params[i++] = {"ALT_P_FF",        &alt_pitch_ff,                         0.0f,  -10.0f,  10.0f};
-
     PARAM_COUNT = i;
 }
 

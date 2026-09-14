@@ -16,7 +16,7 @@ inline float wp_radius = (float)WP_RADIUS_DEFAULT; // Radius penerimaan waypoint
 
 // loitering: wahana berputar2 di wp tertentu
 #ifndef LOITER_RADIUS_DEFAULT
-#define LOITER_RADIUS_DEFAULT 50
+#define LOITER_RADIUS_DEFAULT -50
 #endif
 
 // Perilaku saat misi AUTO selesai (ArduPilot MIS_DONE_BEHAVE):
@@ -52,8 +52,8 @@ inline float rtl_altitude = 60.0f; // meter
 
 /** TECS TUNE (Non-Airspeed Mode Defaults) - Single Source of Truth */
 inline float tecs_cruise_throttle = 70.0f; // % throttle saat terbang datar (FW_THR_CRUISE)
-inline float tecs_min_throttle    = 30.0f; // % throttle minimal saat menukik (FW_THR_MIN - idle thrust)
-inline float tecs_max_throttle    = 85.0f; // % throttle maksimal saat menanjak (FW_THR_MAX)
+// inline float tecs_min_throttle    = 30.0f; // % throttle minimal saat menukik (FW_THR_MIN - idle thrust)
+// inline float tecs_max_throttle    = 85.0f; // % throttle maksimal saat menanjak (FW_THR_MAX)
 inline float min_gndspeed         = 17.0f; // m/s (safety floor angin sakal)
 
 // Aliases for backwards compatibility - always points to the authoritative variables
