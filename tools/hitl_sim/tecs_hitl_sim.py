@@ -131,8 +131,8 @@ class FixedWingPhysics:
         self.wind_down = 0.0       # m/s
 
         # Home Coordinates (UGM / Lapangan Grha Sabha Pramana)
-        self.lat_home = -7.768000 #-7.7738260
-        self.lon_home = 110.234000 #110.3784420
+        self.lat_home = -7.7738260 #-7.768000 
+        self.lon_home = 110.3784420 #110.234000 
 
     def step(self, dt: float, elevator_cmd: float, aileron_cmd: float, rudder_cmd: float, throttle_pct: float):
         """

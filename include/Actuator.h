@@ -348,8 +348,10 @@ void servos_out_manual() {
     uint16_t safe_pitch = (ch_pitch >= 900 && ch_pitch <= 2100) ? ch_pitch : 1500;
     uint16_t safe_yaw   = (ch_yaw >= 900 && ch_yaw <= 2100) ? ch_yaw : 1500;
 
-    aileron_L.writeMicroseconds(3000 - safe_roll);  // 45 = trim wahana FW
-    aileron_R.writeMicroseconds(3000 - safe_roll);  // TODO: besok 24 feb di 0 in dulu
+    // aileron_L.writeMicroseconds(3000 - safe_roll);  // 45 = trim wahana FW
+    // aileron_R.writeMicroseconds(3000 - safe_roll);  // TODO: besok 24 feb di 0 in dulu
+    aileron_L.writeMicroseconds(safe_roll);
+    aileron_R.writeMicroseconds(safe_roll);
     elevator.writeMicroseconds(safe_pitch);
     rudder_L.writeMicroseconds(safe_yaw);
     rudder_R.writeMicroseconds(safe_yaw);
@@ -357,8 +359,10 @@ void servos_out_manual() {
 
 void fw_servos_out_fbwa() {
     // Hitung output servo dari kontrol pitch, roll, yaw
-    pwm_ail_R = constrain(1500 - fw_control.servos[0], 988, 2012);
-    pwm_ail_L = constrain(1500 - fw_control.servos[1], 988, 2012);       
+    // pwm_ail_R = constrain(1500 - fw_control.servos[0], 988, 2012);
+    // pwm_ail_L = constrain(1500 - fw_control.servos[1], 988, 2012);       
+    pwm_ail_R = constrain(fw_control.servos[0] + 1500, 988, 2012);
+    pwm_ail_L = constrain(fw_control.servos[1] + 1500, 988, 2012);       
     pwm_ele   = constrain(fw_control.servos[2] + 1500, 988, 2012);
     pwm_rud   = constrain(fw_control.servos[3] + 1500, 988, 2012);
 
